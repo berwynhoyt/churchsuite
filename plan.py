@@ -16,6 +16,7 @@ import pathvalidate
 import docx
 from docx.shared import RGBColor
 from docx.enum.text import WD_TAB_ALIGNMENT
+from docx.oxml.shared import qn
 
 # Regex of pattern used to identify start of red-highlighted text in service plans
 everyone_pattern = re.compile(r'(.* |^)((all|everyone|together):)(.*)', re.IGNORECASE + re.DOTALL)
@@ -54,6 +55,14 @@ def add_paragraph(doc, words):
             addition.bold = True
         prev_line = line
 
+def set_language(doc, language):
+    # Access the default run properties element
+    styles_element = doc.styles.element
+    rpr_default = styles_element.xpath('./w:docDefaults/w:rPrDefault/w:rPr')[0]
+    # Access or create the w:lang element and set the language value
+    lang_default = rpr_default.xpath('w:lang')[0]
+    lang_default.set(qn('w:val'), language) # Example: set to German (Germany)
+
 def plan2docx(plan, quiet=False):
     """ Save service plan to MS Word .docx file for easier markup by the service leader.
         The output is also less noisy than the pdf plan exported by ChurchSuite.
@@ -63,6 +72,7 @@ def plan2docx(plan, quiet=False):
     if not quiet:
         print(f"Creating {filename}")
     doc = docx.Document()
+    set_language(doc, args.language)
     # Calculate the position of the right margin (page width - left margin - right margin)
     sec = doc.sections[0]
     margin_end = sec.page_width - sec.left_margin - sec.right_margin
@@ -122,6 +132,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-v', '--verbose', action='count', default=0, help="Increase verbosity level (e.g., -vv)")
     parser.add_argument('--txt', action='store_true', help="Output text to terminal rather than to a docx file")
+    parser.add_argument('--language', action='store', default='en-AU', help='Set language for docx file')
     args = parser.parse_args()
     # Set logging level based on -v flag
     log_level = logging.WARNING - 10*args.verbose
