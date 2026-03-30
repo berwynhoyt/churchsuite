@@ -5,13 +5,54 @@ import pprint
 import argparse
 import logging
 import textwrap
+import re
 
 from datetime import date, timedelta
 
 import churchsuite as cs
 import secrets
 import pathvalidate
+
 import docx
+from docx.shared import RGBColor
+from docx.enum.text import WD_TAB_ALIGNMENT
+
+# Regex of pattern used to identify start of red-highlighted text in service plans
+everyone_pattern = re.compile(r'(.* |^)((all|everyone|together):)(.*)', re.IGNORECASE + re.DOTALL)
+# Regex of pattern used to identify start on non-red text in service plans
+leader_pattern = re.compile(r'(.* |^)((leader):)(.*)', re.IGNORECASE + re.DOTALL)
+
+def add_paragraph(doc, words):
+    red = RGBColor(255, 0, 0)
+    color = None
+
+    para = doc.add_paragraph()
+    # Add words to paragraph a line at a time so we can mark text said by all as red
+    lines = words.splitlines(keepends=True)
+    prev_line = None
+    for line in lines:
+        remaining_line = line
+        # Blank line (i.e. \n\n) reverts to normal text
+        if line.strip() == '':
+            color = None
+        # Lines intended for all to recite switch to red text
+        match = everyone_pattern.search(remaining_line)
+        if match:
+            para.add_run(match.group(1) + match.group(2)).bold = True
+            remaining_line = match.group(4)
+            color = red
+        # Lines for the leader are in black text
+        match = leader_pattern.search(remaining_line)
+        if match:
+            color = None
+            para.add_run(match.group(1) + match.group(2)).bold = True
+            remaining_line = match.group(4)
+        addition = para.add_run(remaining_line)
+        if color:
+            addition.font.color.rgb = color
+        if remaining_line.strip().endswith(':') and not prev_line:
+            addition.bold = True
+        prev_line = line
 
 def plan2docx(plan, quiet=False):
     """ Save service plan to MS Word .docx file for easier markup by the service leader.
@@ -22,27 +63,44 @@ def plan2docx(plan, quiet=False):
     if not quiet:
         print(f"Creating {filename}")
     doc = docx.Document()
+    # Calculate the position of the right margin (page width - left margin - right margin)
+    sec = doc.sections[0]
+    margin_end = sec.page_width - sec.left_margin - sec.right_margin
 
     doc.add_heading(title)
     items = db.get(cs.URL.plan_items, params={'plan_ids[]':plan.id})
     for item in items:
         names = [f"{person.first_name} {person.last_name}" for person in item.people or []]
-        doc.add_heading(f"{item.name} ({','.join(names)})", level=1)
+        item_name = item.name
+        if names:
+            item_name += '\t(' + ', '.join(names) + ')'
+        heading = doc.add_heading(item_name, level=1)
+        # Add a new tab stop at the calculated end position, with RIGHT alignment
+        tab_stops = heading.paragraph_format.tab_stops
+        tab_stops.add_tab_stop(margin_end, alignment=WD_TAB_ALIGNMENT.RIGHT)
+
         logging.info(pprint.pformat(item))
         for q in getattr(item, 'question_responses') or ():
-            for section, words in cs.item_sections(item).items():
-                doc.add_heading(section, level=2)
+            sections = cs.item_sections(item).items()
+            for section, words in sections:
+                if len(sections) > 1:
+                    doc.add_heading(section, level=2)
+                if words:
+                    add_paragraph(doc, words)
 
     doc.save(filename)
     return filename
 
 def plan2txt(plan):
     """ Print service plan as txt. This is mainly for developer tinkering. """
-    print(f"{plan.date} {plan.name} {' (draft)' if status=='draft' else ''}:")
+    print(f"{plan.date} {plan.name} {' (draft)' if plan.status=='draft' else ''}:")
     items = db.get(cs.URL.plan_items, params={'plan_ids[]':plan.id})
     for item in items:
         names = [f"{person.first_name} {person.last_name}" for person in item.people or []]
-        print(f"{item.name} ({','.join(names)})")
+        item_name = item.name
+        if names:
+            item_name += ' (' + ', '.join(names) + ')'
+        print(item_name)
         logging.info(pprint.pformat(item))
         for q in getattr(item, 'question_responses') or ():
             for section, words in cs.item_sections(item).items():
@@ -62,7 +120,8 @@ def upcoming_services(db):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-v", "--verbose", action="count", default=0, help="Increase verbosity level (e.g., -vv)")
+    parser.add_argument('-v', '--verbose', action='count', default=0, help="Increase verbosity level (e.g., -vv)")
+    parser.add_argument('--txt', action='store_true', help="Output text to terminal rather than to a docx file")
     args = parser.parse_args()
     # Set logging level based on -v flag
     log_level = logging.WARNING - 10*args.verbose
@@ -70,4 +129,7 @@ if __name__ == "__main__":
 
     db = cs.Churchsuite(auth=(secrets.CLIENT_ID, secrets.CLIENT_SECRET))
     for plan in upcoming_services(db):
-        plan2docx(plan)
+        if args.txt:
+            plan2txt(plan)
+        else:
+            plan2docx(plan)
