@@ -19,9 +19,9 @@ from docx.enum.text import WD_TAB_ALIGNMENT
 from docx.oxml.shared import qn
 
 # Regex of pattern used to identify start of red-highlighted text in service plans
-everyone_pattern = re.compile(r'(.* |^)((all|everyone|together):)(.*)', re.IGNORECASE + re.DOTALL)
+everyone_pattern = re.compile(r'(.* |^)((all|everyone|together|^people):)(.*)', re.IGNORECASE + re.DOTALL)
 # Regex of pattern used to identify start on non-red text in service plans
-leader_pattern = re.compile(r'(.* |^)((leader):)(.*)', re.IGNORECASE + re.DOTALL)
+leader_pattern = re.compile(r'(.* |^)((leader|minister|reader):)(.*)', re.IGNORECASE + re.DOTALL)
 
 def add_paragraph(doc, words):
     red = RGBColor(255, 0, 0)
@@ -123,7 +123,7 @@ def upcoming_services(db):
     today = date.today()
     plans = []
     for status in ('published', 'draft'):
-        plans += db.get(cs.URL.plans, status=status, starts_after=str(today), starts_before=str(today + timedelta(days=7)), per_page=1)
+        plans += db.get(cs.URL.plans, status=status, starts_after=str(today), starts_before=str(today + timedelta(days=7)))
     if not plans:
         sys.exit("There is no plan in ChurchSuite for the coming week")
     return plans

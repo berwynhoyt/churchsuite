@@ -1,6 +1,9 @@
-# Python Scripting for ChurchSuite API v2
+# Docx Export for ChurchSuite and Python Scripting for API v2
 
-This repository contains a Python library `churchsuite.py` to conveniently access to the ChurchSuite API v2. It also contains a Python script `plan.py` that uses the library to fetch the coming week's service plans and exports them to MS Word `docx` documents.
+This repository contains two things:
+
+1. A Python library `churchsuite.py` to conveniently access to the ChurchSuite API v2.
+2. A Python script `plan.py` that uses the library to export the coming week's service plans as MS Word `docx` files.
 
 ## Quickstart
 
@@ -36,6 +39,14 @@ for p in people:
 
 Then run `python contacts.py`.
 
-## Export service plans to docx
+## Docx Export
 
-Setup as in the Quickstart above, then run `python plan.py` and it will save one `docx` file for each service plan.
+This exports the coming week's service plans to separate docx files. This allows service leaders to more easily highlight or add their own notes than they could with the pdf. It is also a much clearer format for service leaders to find their place on the page.
+
+It works as follows:
+
+- It automatically highlights in red any responsive text that comes after "all:", "everyone:", "together:", or "people:"
+- It stops red text when it gets to a double-new-line or when it gets to a "Leader:" line.
+- It emboldens "Leader:", "Minister, or "Reader:"
+
+To use it, do the setup as in the Quickstart above, then run `python plan.py` and it will save one `docx` file for each service plan.
