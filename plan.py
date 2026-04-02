@@ -138,7 +138,9 @@ if __name__ == "__main__":
     log_level = logging.WARNING - 10*args.verbose
     logging.basicConfig(level=log_level, format=f'%(levelname)s: %(message)s')
 
-    db = cs.Churchsuite(auth=(secrets.CLIENT_ID, secrets.CLIENT_SECRET))
+    db = cs.Churchsuite(secrets.CLIENT_ID, secrets.CLIENT_SECRET)
+    #db = cs.Churchsuite(secrets.CLIENT_ID_app, secrets.CLIENT_SECRET_app, redirect_url="https://stgilesgreenwich.churchsuite.com")
+
     for plan in upcoming_services(db):
         if args.txt:
             plan2txt(plan)

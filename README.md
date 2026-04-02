@@ -31,7 +31,7 @@ Third, create a Python program like the following `contacts.py` which prints the
 import churchsuite
 import secrets
 
-db = churchsuite.Churchsuite(auth=(secrets.CLIENT_ID, secrets.CLIENT_SECRET))
+db = churchsuite.Churchsuite(secrets.CLIENT_ID, secrets.CLIENT_SECRET)
 people = db.get(churchsuite.URL.contacts, per_page=100, status='active')
 for p in people:
 	print(f"{p.first_name} {p.last_name}: {p.email}")
@@ -39,7 +39,11 @@ for p in people:
 
 Then run `python contacts.py`.
 
-## Docx Export
+### OAuth_app Authorization
+
+If you supply a third parameter when you call `churchsuite.Churchsuite(client_id, client_secret, request_url)`, it will automatically use `oauth_app` authorization instead of `api_enabled_user` authorization. You can use this to give for web app users access to their Churchsuite data. (First you need to set up an app in ChurchSuite: `ProfileIcon -> Settings -> OAuth Apps`.)
+
+## Docx Export of Service Plans
 
 This exports the coming week's service plans to separate docx files. This allows service leaders to more easily highlight or add their own notes than they could with the pdf. It is also a much clearer format for service leaders to find their place on the page.
 

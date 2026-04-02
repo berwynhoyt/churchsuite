@@ -9,6 +9,8 @@ import pprint
 
 from types import SimpleNamespace
 
+from requests_oauthlib import OAuth2Session
+
 # List of URLs for ChurchSuite access
 class URL:
     api = 'https://api.churchsuite.com/v2/'
@@ -32,13 +34,35 @@ def joiner(*args):
     return '/'.join(str(arg) for arg in args if arg is not None)
 
 class Churchsuite:
-    def __init__(self, auth):
-        """ Create database connection and get access token using the supplied authorisation tuple auth (client_id, client_secret)  """
-        # Get access token
-        auth_url = "https://login.churchsuite.com/oauth2/token"
-        r = requests.post(auth_url, auth=auth, json={'grant_type': 'client_credentials', 'scope': 'full_access'}, headers={'Content-Type': 'application/json'})
-        r.raise_for_status()
-        self.token = r.json().get('access_token')
+    def __init__(self, client_id, client_secret, redirect_url=None):
+        """ Create ChurchSuite database 'connection' instance and get access token using the supplied authorisation details.
+            If redirect_url is supplied, it will use oauth_app authorization; otherwise it will use api_enabled_user authorization.
+        """
+        self.token = self.authorize(client_id, client_secret, redirect_url)
+
+    @staticmethod
+    def authorize(client_id, client_secret, redirect_url=None):
+        """ Return access token using the supplied authorisation details.
+            If redirect_url is supplied, it will use oauth_app authorization; otherwise it will use api_enabled_user authorization.
+        """
+        token_url = "https://login.churchsuite.com/oauth2/token"
+        auth_url = "https://login.churchsuite.com/oauth2/authorize"
+        scope = ['full_access']
+
+        # If using api_enabled_user authorization
+        if redirect_url is None:
+            auth = (client_id, client_secret)
+            r = requests.post(token_url, auth=auth, json={'grant_type': 'client_credentials', 'scope': scope[0]}, headers={'Content-Type': 'application/json'})
+            r.raise_for_status()
+            return r.json().get('access_token')
+
+        # Otherwise try oauth_app authorization
+        oauth = OAuth2Session(client_id, redirect_uri=redirect_url, scope=scope)
+        authorization_url, state = oauth.authorization_url(auth_url)
+        print(f"Please go to {authorization_url} and authorize access.")
+        authorization_response = input('Enter the full callback URL: ')
+        json = oauth.fetch_token(token_url, authorization_response=authorization_response, client_secret=client_secret)
+        return json.get('access_token')
 
     def get(self, url, id=None, item=None, *, params=None, **kwargs):
         """ Return 'data' field from ChurchSuite GET response as a SimpleNamespace, or list of SimpleNamespaces if the request returns a list.
