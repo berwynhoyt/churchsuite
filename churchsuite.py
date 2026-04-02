@@ -34,11 +34,21 @@ def joiner(*args):
     return '/'.join(str(arg) for arg in args if arg is not None)
 
 class Churchsuite:
-    def __init__(self, client_id, client_secret, redirect_url=None):
+    def __init__(self, client_id, client_secret, *, redirect_url=None, raw=None):
         """ Create ChurchSuite database 'connection' instance and get access token using the supplied authorisation details.
             If redirect_url is supplied, it will use oauth_app authorization; otherwise it will use api_enabled_user authorization.
+            If filename raw is supplied, store all json text received from the server into that file.
         """
         self.token = self.authorize(client_id, client_secret, redirect_url)
+        self.raw = raw
+        if raw is not None:
+            # truncate file
+            open(raw, 'w').close()
+
+    def append_raw(self, text):
+        if self.raw is not None:
+            with open(self.raw, 'a') as f:
+                f.write(text)
 
     @staticmethod
     def authorize(client_id, client_secret, redirect_url=None):
@@ -76,6 +86,7 @@ class Churchsuite:
         r = requests.get(url, headers={'Authorization': f'Bearer {self.token}'}, params=params)
         logging.debug(f"request: {dump_request(r.request).replace('\n', '\n|  ')}")
         r.raise_for_status()
+        self.append_raw(json.dumps(r.json(), indent=4) + '\n')
         # Convert json dict to SimpleNamespace (recursively for sub-objects)
         object = json.loads(r.text, object_hook=lambda d: SimpleNamespace(**d))
         formatted_response = f"GET {url} =>\n| {pprint.pformat(object).replace('\n', '\n| ')}"
@@ -83,12 +94,3 @@ class Churchsuite:
         if not hasattr(object, 'data'):
             raise Exception("No 'data' field found in response to {formatted_response}")
         return object.data
-
-def item_sections(item):
-    """ Return a dictionary of all the named sections of the given service plan item """
-    sections = {}
-    for q in getattr(item, 'question_responses') or ():
-        if not q or q.response_type != 'paragraph':
-            continue
-        sections[q.name] = ''.join(q.value).replace('\r\n', '\n')
-    return sections

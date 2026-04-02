@@ -32,28 +32,30 @@ def add_paragraph(doc, words):
     lines = words.splitlines(keepends=True)
     prev_line = None
     for line in lines:
-        remaining_line = line
+        original_line = line
+        if line.strip() in [':', '.', '-']:
+            line = line.replace(':', '').replace('.', '').replace('-', '')
         # Blank line (i.e. \n\n) reverts to normal text
         if line.strip() == '':
             color = None
         # Lines intended for all to recite switch to red text
-        match = everyone_pattern.search(remaining_line)
+        match = everyone_pattern.search(line)
         if match:
             para.add_run(match.group(1) + match.group(2)).bold = True
-            remaining_line = match.group(4)
+            line = match.group(4)
             color = red
         # Lines for the leader are in black text
-        match = leader_pattern.search(remaining_line)
+        match = leader_pattern.search(line)
         if match:
             color = None
             para.add_run(match.group(1) + match.group(2)).bold = True
-            remaining_line = match.group(4)
-        addition = para.add_run(remaining_line)
+            line = match.group(4)
+        addition = para.add_run(line)
         if color:
             addition.font.color.rgb = color
-        if remaining_line.strip().endswith(':') and not prev_line:
+        if line.strip().endswith(':') and not prev_line:
             addition.bold = True
-        prev_line = line
+        prev_line = original_line
 
 def set_language(doc, language):
     # Access the default run properties element
@@ -62,6 +64,22 @@ def set_language(doc, language):
     # Access or create the w:lang element and set the language value
     lang_default = rpr_default.xpath('w:lang')[0]
     lang_default.set(qn('w:val'), language) # Example: set to German (Germany)
+
+
+def item_sections(item):
+    """ Return a dictionary of all the named sections of the given service plan item """
+    sections = {}
+    responses = getattr(item, 'question_responses')
+    if not responses and item.comment:
+        sections['comment'] = item.comment.replace('\r\n', '\n')
+        return sections
+
+    for q in responses or ():
+        if not q:
+            continue
+        sections[q.name] = q.value.replace('\r\n', '\n')
+        
+    return sections
 
 def plan2docx(plan, quiet=False):
     """ Save service plan to MS Word .docx file for easier markup by the service leader.
@@ -90,13 +108,12 @@ def plan2docx(plan, quiet=False):
         tab_stops.add_tab_stop(margin_end, alignment=WD_TAB_ALIGNMENT.RIGHT)
 
         logging.info(pprint.pformat(item))
-        for q in getattr(item, 'question_responses') or ():
-            sections = cs.item_sections(item).items()
-            for section, words in sections:
-                if len(sections) > 1:
-                    doc.add_heading(section, level=2)
-                if words:
-                    add_paragraph(doc, words)
+        sections = item_sections(item)
+        for section, words in sections.items():
+            if len(sections) > 1:
+                doc.add_heading(section, level=2)
+            if words:
+                add_paragraph(doc, words)
 
     doc.save(filename)
     return filename
@@ -111,10 +128,10 @@ def plan2txt(plan):
         if names:
             item_name += ' (' + ', '.join(names) + ')'
         print(item_name)
+
         logging.info(pprint.pformat(item))
-        for q in getattr(item, 'question_responses') or ():
-            for section, words in cs.item_sections(item).items():
-                print(textwrap.indent(f"*{section}*: {words}", '  '))
+        for section, words in item_sections(item).items():
+            print(textwrap.indent(f"*{section}*: {words}", '  '))
 
 def upcoming_services(db):
     """ Get all published and draft plans for the next week and output them as Word .docx files for easier markup.
@@ -132,13 +149,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-v', '--verbose', action='count', default=0, help="Increase verbosity level (e.g., -vv)")
     parser.add_argument('--txt', action='store_true', help="Output text to terminal rather than to a docx file")
+    parser.add_argument('--raw', action='store', default=None, help="Send all json received from the server into the specified raw json file")
     parser.add_argument('--language', action='store', default='en-AU', help='Set language for docx file')
     args = parser.parse_args()
     # Set logging level based on -v flag
     log_level = logging.WARNING - 10*args.verbose
     logging.basicConfig(level=log_level, format=f'%(levelname)s: %(message)s')
 
-    db = cs.Churchsuite(secrets.CLIENT_ID, secrets.CLIENT_SECRET)
+    db = cs.Churchsuite(secrets.CLIENT_ID, secrets.CLIENT_SECRET, raw=args.raw)
     #db = cs.Churchsuite(secrets.CLIENT_ID_app, secrets.CLIENT_SECRET_app, redirect_url="https://stgilesgreenwich.churchsuite.com")
 
     for plan in upcoming_services(db):
