@@ -15,6 +15,7 @@ import pathvalidate
 
 import docx
 from docx.shared import RGBColor
+from docx.shared import Mm
 from docx.enum.text import WD_TAB_ALIGNMENT
 from docx.oxml.shared import qn
 
@@ -93,6 +94,12 @@ def plan2docx(plan, quiet=False):
     set_language(doc, args.language)
     # Calculate the position of the right margin (page width - left margin - right margin)
     sec = doc.sections[0]
+    sec.page_height = Mm(297)
+    sec.page_width = Mm(210)
+    sec.left_margin = Mm(22)
+    sec.right_margin = Mm(22)
+    sec.top_margin = Mm(22)
+    sec.bottom_margin = Mm(22)
     margin_end = sec.page_width - sec.left_margin - sec.right_margin
 
     doc.add_heading(title)
