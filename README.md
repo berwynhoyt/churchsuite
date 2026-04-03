@@ -67,6 +67,16 @@ To use it, do the setup as in the Quickstart above, then run `python serviceplan
 
 Instead of the command-line version above, if you wish to run `serviceplan.py` as a web app on Google App Engine, follow these instructions:
 
-* Create a project using the [Google Cloud console](https://console.cloud.google.com/). You will need to call it something like `serviceplans`.
-* Follow instructions to [Create a Google Cloud project](https://docs.cloud.google.com/appengine/docs/standard/python3/building-app/creating-gcp-project). This is complicated, but hopefully you'll get there. I can't help you with it. It will make you create a Google billing account and will take your credit card but it won't actually bill you anything as typical usage of docx fits well within the free tier.
-* Note: you can test the app on your localhost by running `python serviceplan.py --app` and then browsing to `localhost:8080`.
+1. Create a project using the [Google Cloud console](https://console.cloud.google.com/). It requires a project. Call it `<yourchurch>-serviceplans` (or similar).
+2. Follow instructions to [Create a Google Cloud project](https://docs.cloud.google.com/appengine/docs/standard/python3/building-app/creating-gcp-project). This is complicated, but hopefully you'll get there. I can't help you with it. It will make you create a Google billing account and will take your credit card but it won't actually bill you anything as typical usage of docx fits well within the free tier.
+3. Note: you can test the app on your localhost by running `python serviceplan.py --app` and then browsing to `localhost:8080`.
+4. Deploy the app to your Google Cloud project by browsing to [Google Cloud Shell](https://shell.cloud.google.com/) and then typing the following:
+
+```sh
+git clone https://github.com/berwynhoyt/churchsuite.git
+cd churchsuite
+gcloud config set project <yourchurch>-serviceplans  # use the project name you selected in point 1 above
+gcloud deploy app
+```
+
+Now the app will be on the URL the command above supplies; typically https://<your-church>-serviceplans.ts.r.appspot.com/, depending on what you called your project.
