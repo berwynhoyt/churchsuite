@@ -15,7 +15,7 @@ import pathvalidate
 
 import docx
 from docx.shared import RGBColor
-from docx.shared import Mm
+from docx.shared import Mm, Pt
 from docx.enum.text import WD_TAB_ALIGNMENT
 from docx.oxml.shared import qn
 
@@ -71,10 +71,6 @@ def item_sections(item):
     """ Return a dictionary of all the named sections of the given service plan item """
     sections = {}
     responses = getattr(item, 'question_responses')
-    if not responses and item.comment:
-        sections['comment'] = item.comment.replace('\r\n', '\n')
-        return sections
-
     for q in responses or ():
         if not q:
             continue
@@ -82,42 +78,95 @@ def item_sections(item):
         
     return sections
 
+# code to add page number
+
+def set_page_size(section, size):
+    """ Set page size to "width,height" in mm or "A4" or "letter" """
+    size = size.lower()
+    if size != 'letter': # do nothing if it's letter because that's the docx default
+        if size == 'a4': size = "210,297"
+    width, height = size.split(',')
+    section.page_height = Mm(int(height))
+    section.page_width = Mm(int(width))
+    section.left_margin = Mm(22)
+    section.right_margin = Mm(22)
+    section.top_margin = Mm(22)
+    section.bottom_margin = Mm(22)
+
+def add_page_number(section):
+    from docx.oxml import OxmlElement, ns
+    from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+
+    # I don't know how this works. It was taken from: https://stackoverflow.com/questions/56658872/add-page-number-using-python-docx
+    def create_element(name): return OxmlElement(name)
+    def create_attribute(element, name, value): element.set(ns.qn(name), value)
+
+    fldChar1 = create_element('w:fldChar')
+    create_attribute(fldChar1, 'w:fldCharType', 'begin')
+
+    instrText = create_element('w:instrText')
+    create_attribute(instrText, 'xml:space', 'preserve')
+    instrText.text = "PAGE"
+
+    fldChar2 = create_element('w:fldChar')
+    create_attribute(fldChar2, 'w:fldCharType', 'end')
+
+    paragraph = section.header.paragraphs[0]
+    paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.RIGHT
+    run = paragraph.add_run()
+    run._r.append(fldChar1)
+    run._r.append(instrText)
+    run._r.append(fldChar2)
+
 def plan2docx(plan, quiet=False):
     """ Save service plan to MS Word .docx file for easier markup by the service leader.
         The output is also less noisy than the pdf plan exported by ChurchSuite.
     """
+    green = RGBColor(0, 153, 0)
+    black = RGBColor(0, 0, 0)
+
     title = f"{plan.date} {plan.name}{' (draft)' if plan.status=='draft' else ''}"
     filename = pathvalidate.sanitize_filename(title) + '.docx'
     if not quiet:
         print(f"Creating {filename}")
     doc = docx.Document()
     set_language(doc, args.language)
-    # Calculate the position of the right margin (page width - left margin - right margin)
-    sec = doc.sections[0]
-    sec.page_height = Mm(297)
-    sec.page_width = Mm(210)
-    sec.left_margin = Mm(22)
-    sec.right_margin = Mm(22)
-    sec.top_margin = Mm(22)
-    sec.bottom_margin = Mm(22)
-    margin_end = sec.page_width - sec.left_margin - sec.right_margin
+    doc.styles['Normal'].font.size = Pt(args.fontsize)
+    doc.styles['Heading 1'].font.size = Pt(args.fontsize + 3)
+    doc.styles['Heading 2'].font.size = Pt(args.fontsize + 1)
+    section = doc.sections[0]
+    set_page_size(section, args.pagesize)
+    add_page_number(section)
+    # Calculate the position of the right margin (page width - left margin - right margin) for right-margin tabstop below
+    right_margin = section.page_width - section.left_margin - section.right_margin
 
     doc.add_heading(title)
     items = db.get(cs.URL.plan_items, params={'plan_ids[]':plan.id})
     for item in items:
+        logging.info(pprint.pformat(item))
         names = [f"{person.first_name} {person.last_name}" for person in item.people or []]
-        item_name = item.name
-        if names:
-            item_name += '\t(' + ', '.join(names) + ')'
-        heading = doc.add_heading(item_name, level=1)
+        heading = doc.add_heading(level=1)
+        run = heading.add_run(item.name)
+        # If it's a song we put it in green with song title
+        if item.name.lower().strip() in ['song', 'psalm', 'hymn']:
+            run.bold = False
+            run.font.color.rgb = green
+            if item.comment:
+                run = heading.add_run(': ' + item.comment.strip())
+                run.font.color.rgb = green
+
         # Add a new tab stop at the calculated end position, with RIGHT alignment
         tab_stops = heading.paragraph_format.tab_stops
-        tab_stops.add_tab_stop(margin_end, alignment=WD_TAB_ALIGNMENT.RIGHT)
+        tab_stops.add_tab_stop(right_margin, alignment=WD_TAB_ALIGNMENT.RIGHT)
+        if names:
+            run = heading.add_run('\t(' + ', '.join(names) + ')')
+            run.font.size = doc.styles['Normal'].font.size
+            run.font.color.rgb = black
+            run.bold = False
 
-        logging.info(pprint.pformat(item))
         sections = item_sections(item)
         for section, words in sections.items():
-            if len(sections) > 1:
+            if len(sections) > 1 and words.strip():
                 doc.add_heading(section, level=2)
             if words:
                 add_paragraph(doc, words)
@@ -131,10 +180,9 @@ def plan2txt(plan):
     items = db.get(cs.URL.plan_items, params={'plan_ids[]':plan.id})
     for item in items:
         names = [f"{person.first_name} {person.last_name}" for person in item.people or []]
-        item_name = item.name
         if names:
-            item_name += ' (' + ', '.join(names) + ')'
-        print(item_name)
+            item.name += ' (' + ', '.join(names) + ')'
+        print(item.name)
 
         logging.info(pprint.pformat(item))
         for section, words in item_sections(item).items():
@@ -158,6 +206,8 @@ if __name__ == "__main__":
     parser.add_argument('--txt', action='store_true', help="Output text to terminal rather than to a docx file")
     parser.add_argument('--raw', action='store', default=None, help="Send all json received from the server into the specified raw json file")
     parser.add_argument('--language', action='store', default='en-AU', help='Set language for docx file')
+    parser.add_argument('--pagesize', action='store', default='A4', help='Set page size to "width,height" in mm or "A4" or "letter"')
+    parser.add_argument('--fontsize', action='store', type=int, default=14, help='Set normal fontsize on Pt. Headings are enlargements of this')
     args = parser.parse_args()
     # Set logging level based on -v flag
     log_level = logging.WARNING - 10*args.verbose

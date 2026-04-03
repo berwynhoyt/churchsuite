@@ -52,5 +52,7 @@ It works as follows:
 - It automatically highlights in red any responsive text that comes after "all:", "everyone:", "together:", or "people:"
 - It stops red text when it gets to a double-new-line or when it gets to a "Leader:" line.
 - It emboldens "Leader:", "Minister, or "Reader:"
+- "Song", "Hymn" and "Psalm" headings are displayed in green along with the song title.
+- Level-2 section headings are omitted if they contain no text.
 
-To use it, do the setup as in the Quickstart above, then run `python plan.py` and it will save one `docx` file for each service plan.
+To use it, do the setup as in the Quickstart above, then run `python plan.py` and it will save one `docx` file for each service plan in the  coming week.
