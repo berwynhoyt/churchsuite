@@ -1,4 +1,2 @@
-# Detail required by Google App Engine to run serviceplan.py:app
-
 runtime: python314
 entrypoint: gunicorn -b :$PORT serviceplan:app

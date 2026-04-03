@@ -12,7 +12,6 @@ import re
 from datetime import date, timedelta
 
 import churchsuite as cs
-import secret
 import pathvalidate
 
 # For docx export
@@ -209,6 +208,7 @@ def upcoming_services(db):
 # Command-line app
 
 def cli():
+    import secret
     db = cs.Churchsuite(secret.CLIENT_ID, secret.CLIENT_SECRET, raw=args.raw)
     # Authorize with oauth_app instead of api_enabled_user authorization
     #db = cs.Churchsuite(secret.CLIENT_ID_app, secret.CLIENT_SECRET_app, redirect_url="https://stgilesgreenwich.churchsuite.com")
@@ -229,7 +229,6 @@ def hello_world():
     return f"Hello {name}!"
 
 def web_app():
-    #db = cs.Churchsuite(secret.CLIENT_ID, secret.CLIENT_SECRET, raw=args.raw)
     app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
 
 
