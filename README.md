@@ -14,7 +14,7 @@ Clone this repository and download Python prerequisites as follows:
 ```bash
 git clone https://github.com/berwynhoyt/churchsuite.git
 cd churchsuite
-pip install -r requirements.txt
+pip install -r requirements-base.txt
 ```
 
 Second, [get your ChurchSuite API keys](https://developer.churchsuite.com/auth) and use them to create a file called `secret.py` as follows:
@@ -47,7 +47,12 @@ Then run `python contacts.py`.
 
 ### OAuth_app Authorization
 
-If you supply a third parameter when you call `churchsuite.Churchsuite(client_id, client_secret, request_url)`, it will automatically use `oauth_app` authorization instead of `api_enabled_user` authorization. You can use this to give for web app users access to their Churchsuite data. (First you need to set up an app in ChurchSuite: `ProfileIcon -> Settings -> OAuth Apps`.)
+If you supply a third `redirect_url` parameter when you call `churchsuite.Churchsuite(client_id, client_secret, redirect_url)`, it will automatically use `oauth_app` authorization instead of `api_enabled_user` authorization. This is used if you have designed a churchsuite app and deployed it on Google App Engine or a similar cloud platform. You can use `oauth_app` to give your web app users access to their Churchsuite data. To set this up:
+
+1. Get your app client_id and client_secret by setting up an app in ChurchSuite: `ProfileIcon -> Settings -> OAuth Apps`.
+2. Invoke `churchsuite.Churchsuite` giving it a `redirect_url` that points to your app's url that is ready to receive a ChurchSuite access token.
+
+An example [cloud app setup](#cloud-app-setup) for Docx Export is given below.
 
 ## Docx Export of Service Plans
 
@@ -63,13 +68,13 @@ It works as follows:
 
 To use it, do the setup as in the Quickstart above, then run `python serviceplan.py` and it will save one `docx` file for each service plan in the  coming week.
 
-### Cloud app version
+### Cloud app setup
 
-Instead of the command-line version above, if you wish to run `serviceplan.py` as a web app on Google App Engine, follow these instructions:
+If you want your ChurchSuite users to download service plans simply by browsing to a bookmarked web page, this is for you. Instead of the command-line version above, you will need to run `serviceplan_app.py` as a web app on Google App Engine as follows:
 
 1. Create a project using the [Google Cloud console](https://console.cloud.google.com/). It requires a project. Call it `<yourchurch>-serviceplans` (or similar).
 2. Follow instructions to [Create a Google Cloud project](https://docs.cloud.google.com/appengine/docs/standard/python3/building-app/creating-gcp-project). This is complicated, but hopefully you'll get there. I can't help you with it. It will make you create a Google billing account and will take your credit card but it won't actually bill you anything as typical usage of docx fits well within the free tier.
-3. Note: you can test the app on your localhost by running `python serviceplan.py --app` and then browsing to `localhost:8080`.
+3. Note: you can test the app on your localhost by running `python serviceplan_app.py` and then browsing to `localhost:8080`.
 4. Deploy the app to your Google Cloud project by browsing to [Google Cloud Shell](https://shell.cloud.google.com/) and then typing the following:
 
 ```sh
@@ -79,4 +84,13 @@ gcloud config set project <yourchurch>-serviceplans  # use the project name you 
 gcloud deploy app
 ```
 
-Now the app will be on the URL the command above supplies; typically https://<your-church>-serviceplans.ts.r.appspot.com/, depending on what you called your project.
+Now the app will be on the URL the command above supplies; typically `https://<your-church>-serviceplans.ts.r.appspot.com/`, depending on what you called your project.
+
+Finally, store your app secrets in Google's Secret Manager:
+
+1. Get your app `client_id` and `client_secret` by setting up an app in ChurchSuite: `ProfileIcon -> Settings -> OAuth Apps`.
+2. Go to [Google Cloud Console](https://console.cloud.google.com/welcome?project=serviceplans-492207).
+3. Make sure the name of your Google project (e.g. `<your-church>-serviceplans` is select in the top-left corner beside Google Cloud).
+4. Type "Secret Manager" into the Google Cloud search bar and click it. Enable Secret Manager if necessary.
+5. Click "+ Create Secret" for each of  `client_id` and `client_secret` that you got from ChurchSuite above. You only need to enter the name and value of each secret and leave the rest of the settings untouched. Click "Create secret" at the bottom.
+6. 

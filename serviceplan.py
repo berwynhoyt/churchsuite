@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-""" Fetch the next service plan from ChurchSuite and output it as a word document """
+""" Fetch upcoming service plans from ChurchSuite and export into docx format """
 
 import sys
 import os
@@ -20,9 +20,6 @@ from docx.shared import RGBColor
 from docx.shared import Mm, Pt
 from docx.enum.text import WD_TAB_ALIGNMENT
 from docx.oxml.shared import qn
-
-# For web app
-from flask import Flask
 
 # Regex of pattern used to identify start of red-highlighted text in service plans
 everyone_pattern = re.compile(r'(.* |^)((all|everyone|together|^people):)(.*)', re.IGNORECASE + re.DOTALL)
@@ -200,48 +197,22 @@ def upcoming_services(db):
     today = date.today()
     plans = []
     for status in ('published', 'draft'):
-        plans += db.get(cs.URL.plans, status=status, starts_after=str(today), starts_before=str(today + timedelta(days=7)))
+        plans += db.get(cs.URL.plans, status=status, starts_after=str(today - timedelta(days=1)), starts_before=str(today + timedelta(days=7)))
     if not plans:
         sys.exit("There is no plan in ChurchSuite for the coming week")
     return plans
 
-# Command-line app
-
-def cli():
-    import secret
-    db = cs.Churchsuite(secret.CLIENT_ID, secret.CLIENT_SECRET, raw=args.raw)
-    # Authorize with oauth_app instead of api_enabled_user authorization
-    #db = cs.Churchsuite(secret.CLIENT_ID_app, secret.CLIENT_SECRET_app, redirect_url="https://stgilesgreenwich.churchsuite.com")
-    for plan in upcoming_services(db):
-        if args.txt:
-            plan2txt(plan)
-        else:
-            plan2docx(plan)
-
-# Web app
-
-app = Flask(__name__)
-
-@app.route("/")
-def hello_world():
-    """Example Hello World route."""
-    name = os.environ.get("NAME", "World")
-    return f"Hello {name}!"
-
-def web_app():
-    app.run(debug=True, host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
-
+# Set these up even if this file is imported so that the importer (e.g. serviceplan-app.py can access and adjust the defaults below
+parser = argparse.ArgumentParser()
+parser.add_argument('--language', action='store', default='en-AU', help='Set language for docx file.')
+parser.add_argument('--pagesize', action='store', default='A4', help='Set page size to "width,height" in mm or "A4" or "letter".')
+parser.add_argument('--fontsize', action='store', type=int, default=14, help='Set normal fontsize on Pt. Headings are enlargements of this.')
+parser.add_argument('-v', '--verbose', action='count', default=0, help="Increase verbosity level (e.g., -vv).")
+parser.add_argument('--txt', action='store_true', help="Output text to terminal rather than to a docx file.")
+parser.add_argument('--raw', action='store', default=None, help="Send all json received from the server into the specified raw json file.")
+args = parser.parse_args()
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-v', '--verbose', action='count', default=0, help="Increase verbosity level (e.g., -vv).")
-    parser.add_argument('--txt', action='store_true', help="Output text to terminal rather than to a docx file.")
-    parser.add_argument('--raw', action='store', default=None, help="Send all json received from the server into the specified raw json file.")
-    parser.add_argument('--language', action='store', default='en-AU', help='Set language for docx file.')
-    parser.add_argument('--pagesize', action='store', default='A4', help='Set page size to "width,height" in mm or "A4" or "letter".')
-    parser.add_argument('--fontsize', action='store', type=int, default=14, help='Set normal fontsize on Pt. Headings are enlargements of this.')
-    parser.add_argument('--app', action='store_true', help='Run as a web app on port $PORT (default 8080). Also runs as web app if $GAE_ENV is not blank.')
-    args = parser.parse_args()
     if len(sys.argv) < 2:
         print(f"{sys.argv[0]} exports ChurchSuite service plans to a docx file. For help, run: {sys.argv[0]} -h")
 
@@ -249,7 +220,10 @@ if __name__ == "__main__":
     log_level = logging.WARNING - 10*args.verbose
     logging.basicConfig(level=log_level, format=f'%(levelname)s: %(message)s')
 
-    if args.app or os.getenv('GAE_ENV'):
-        web_app()
-    else:
-        cli()
+    import secret
+    db = cs.Churchsuite(secret.CLIENT_ID, secret.CLIENT_SECRET, raw=args.raw)
+    for plan in upcoming_services(db):
+        if args.txt:
+            plan2txt(plan)
+        else:
+            plan2docx(plan)
