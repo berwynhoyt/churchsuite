@@ -29,7 +29,7 @@ def hello_world():
 @app.route("/secret")
 def secret():
     """ Return secret """
-    return get_secret(os.environ.get('GOOGLE_CLOUD_PROJECT'), 'secret_id')
+    return get_secret(os.environ.get('GOOGLE_CLOUD_PROJECT'), 'client_id')
 
 @app.route("/version")
 def version():
