@@ -10,6 +10,7 @@ import textwrap
 import re
 
 from datetime import date, timedelta
+from types import SimpleNamespace
 
 import churchsuite as cs
 import pathvalidate
@@ -202,17 +203,18 @@ def upcoming_services(db):
         sys.exit("There is no plan in ChurchSuite for the coming week")
     return plans
 
-# Set these up even if this file is imported so that the importer (e.g. serviceplan-app.py can access and adjust the defaults below
-parser = argparse.ArgumentParser()
-parser.add_argument('--language', action='store', default='en-AU', help='Set language for docx file.')
-parser.add_argument('--pagesize', action='store', default='A4', help='Set page size to "width,height" in mm or "A4" or "letter".')
-parser.add_argument('--fontsize', action='store', type=int, default=14, help='Set normal fontsize on Pt. Headings are enlargements of this.')
-parser.add_argument('-v', '--verbose', action='count', default=0, help="Increase verbosity level (e.g., -vv).")
-parser.add_argument('--txt', action='store_true', help="Output text to terminal rather than to a docx file.")
-parser.add_argument('--raw', action='store', default=None, help="Send all json received from the server into the specified raw json file.")
-args = parser.parse_args()
+# Set defaults that may be used instead of command-line parameters when this module is imported (e.g. by serviceplan_app.py)
+args = SimpleNamespace(language='en_AU', pagesize='A4', fontsize=14)
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--language', action='store', default=args.language, help='Set language for docx file.')
+    parser.add_argument('--pagesize', action='store', default=args.pagesize, help='Set page size to "width,height" in mm or "A4" or "letter".')
+    parser.add_argument('--fontsize', action='store', type=int, default=args.fontsize, help='Set normal fontsize on Pt. Headings are enlargements of this.')
+    parser.add_argument('-v', '--verbose', action='count', default=0, help="Increase verbosity level (e.g., -vv).")
+    parser.add_argument('--txt', action='store_true', help="Output text to terminal rather than to a docx file.")
+    parser.add_argument('--raw', action='store', default=None, help="Send all json received from the server into the specified raw json file.")
+    args = parser.parse_args()
     if len(sys.argv) < 2:
         print(f"{sys.argv[0]} exports ChurchSuite service plans to a docx file. For help, run: {sys.argv[0]} -h")
 
