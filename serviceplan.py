@@ -22,6 +22,8 @@ from docx.shared import Mm, Pt
 from docx.enum.text import WD_TAB_ALIGNMENT
 from docx.oxml.shared import qn
 
+__version__ = '1.0.0'
+
 # Regex of pattern used to identify start of red-highlighted text in service plans
 everyone_pattern = re.compile(r'(.* |^)((all|everyone|together|^people):)(.*)', re.IGNORECASE + re.DOTALL)
 # Regex of pattern used to identify start on non-red text in service plans
@@ -214,6 +216,7 @@ if __name__ == "__main__":
     parser.add_argument('-v', '--verbose', action='count', default=0, help="Increase verbosity level (e.g., -vv).")
     parser.add_argument('--txt', action='store_true', help="Output text to terminal rather than to a docx file.")
     parser.add_argument('--raw', action='store', default=None, help="Send all json received from the server into the specified raw json file.")
+    parser.add_argument('--version', action='store_true', help="Print version number of this script and exit.")
     args = parser.parse_args()
     if len(sys.argv) < 2:
         print(f"{sys.argv[0]} exports ChurchSuite service plans to a docx file. For help, run: {sys.argv[0]} -h")
@@ -221,6 +224,10 @@ if __name__ == "__main__":
     # Set logging level based on -v flag
     log_level = logging.WARNING - 10*args.verbose
     logging.basicConfig(level=log_level, format=f'%(levelname)s: %(message)s')
+
+    if args.version:
+        print(__version__)
+        sys.exit()
 
     import secret
     db = cs.Churchsuite(secret.CLIENT_ID, secret.CLIENT_SECRET, raw=args.raw)

@@ -9,6 +9,8 @@ from flask import Flask
 from google.cloud import secretmanager
 import serviceplan
 
+__version__ = '1.0.0'
+
 def get_secret(project_id, secret_id, version_id="latest"):
     """ Access the payload for the given secret_id; version_id can be "latest" or a specific number """
     client = secretmanager.SecretManagerServiceClient()
@@ -28,6 +30,10 @@ def hello_world():
 def secret():
     """ Return secret """
     return get_secret(os.environ.get('GOOGLE_CLOUD_PROJECT'), 'secret_id')
+
+@app.route("/version")
+def version():
+    return __version__
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format=f'%(levelname)s: %(message)s')
