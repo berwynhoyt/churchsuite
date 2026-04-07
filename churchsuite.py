@@ -11,6 +11,8 @@ from types import SimpleNamespace
 
 from requests_oauthlib import OAuth2Session
 
+__version__ = '1.0.0'
+
 # List of URLs for ChurchSuite access
 class URL:
     api = 'https://api.churchsuite.com/v2/'
@@ -34,12 +36,20 @@ def joiner(*args):
     return '/'.join(str(arg) for arg in args if arg is not None)
 
 class Churchsuite:
-    def __init__(self, client_id, client_secret, *, redirect_url=None, raw=None):
-        """ Create ChurchSuite database 'connection' instance and get access token using the supplied authorisation details.
-            If redirect_url is supplied, it will use oauth_app authorization; otherwise it will use api_enabled_user authorization.
+    """ Class used to access ChurchSuite data """
+
+    token_url = "https://login.churchsuite.com/oauth2/token"
+    auth_url = "https://login.churchsuite.com/oauth2/authorize"
+    scope = 'full_access'
+
+    def __init__(self, token=None, auth=None, raw=None):
+        """ Create ChurchSuite instance for access to ChurchSuite data.
+            If token is not supplied, attempt to get one using user auth (client_id, client_secret).
             If filename raw is supplied, store all json text received from the server into that file.
         """
-        self.token = self.authorize(client_id, client_secret, redirect_url)
+        if not token:
+            token = self.authorize(*auth)
+        self.token = token
         self.raw = raw
         if raw is not None:
             # truncate file
@@ -50,29 +60,12 @@ class Churchsuite:
             with open(self.raw, 'a') as f:
                 f.write(text)
 
-    @staticmethod
-    def authorize(client_id, client_secret, redirect_url=None):
-        """ Return access token using the supplied authorisation details.
-            If redirect_url is supplied, it will use oauth_app authorization; otherwise it will use api_enabled_user authorization.
-        """
-        token_url = "https://login.churchsuite.com/oauth2/token"
-        auth_url = "https://login.churchsuite.com/oauth2/authorize"
-        scope = ['full_access']
-
-        # If using api_enabled_user authorization
-        if redirect_url is None:
-            auth = (client_id, client_secret)
-            r = requests.post(token_url, auth=auth, json={'grant_type': 'client_credentials', 'scope': scope[0]}, headers={'Content-Type': 'application/json'})
-            r.raise_for_status()
-            return r.json().get('access_token')
-
-        # Otherwise try oauth_app authorization
-        oauth = OAuth2Session(client_id, redirect_uri=redirect_url, scope=scope)
-        authorization_url, state = oauth.authorization_url(auth_url)
-        print(f"Please go to {authorization_url} and authorize access.")
-        authorization_response = input('Enter the full callback URL: ')
-        json = oauth.fetch_token(token_url, authorization_response=authorization_response, client_secret=client_secret)
-        return json.get('access_token')
+    def authorize(self, client_id, client_secret):
+        """ Return access token using api_enbaled_user authorization with the supplied authorization credentials. """
+        auth = (client_id, client_secret)
+        r = requests.post(self.token_url, auth=auth, json={'grant_type': 'client_credentials', 'scope': self.scope}, headers={'Content-Type': 'application/json'})
+        r.raise_for_status()
+        return r.json().get('access_token')
 
     def get(self, url, id=None, item=None, *, params=None, **kwargs):
         """ Return 'data' field from ChurchSuite GET response as a SimpleNamespace, or list of SimpleNamespaces if the request returns a list.
@@ -94,3 +87,35 @@ class Churchsuite:
         if not hasattr(object, 'data'):
             raise Exception("No 'data' field found in response to {formatted_response}")
         return object.data
+
+class ChurchsuiteApp(Churchsuite):
+    def __init__(self):
+        """ Create ChurchSuite instance that will hold an access token once authorized. """
+        self.raw = None
+        # Import this here to prevent Flask needing to be installed if only using standard Churchsuite() not ChurchsuiteApp()
+        import flask
+        self.flask = flask
+
+    def authorize_app_manual(self, authclient_id, client_secret, redirect_uri=None, state=None):
+        """ Fetch access token using oauth_app authorization with the supplied authorization credentials.
+            This is a test function to simulate what occurs with authorize_app_stage{1,2}()
+        """
+        oauth = OAuth2Session(client_id, redirect_uri=redirect_uri, scope=[self.scope])
+        authorization_url, state = oauth.authorization_url(self.auth_url, state=state)
+        print(f"Please go to {authorization_url} and authorize access.")
+        authorization_response = input('Enter the full callback URL: ')
+        json = oauth.fetch_token(self.token_url, authorization_response=authorization_response, client_secret=client_secret)
+        self.token = json.get('access_token')
+
+    def authorize_app_stage1(self, client_id, redirect_uri=None, state=None):
+        """ Returns an authorization url which app must redirect user to for ChurchSuite oauth_app authorization.
+            redirect_uri is this app's URL where ChurchSuite will send the user with an authorization token as json data.
+        """
+        oauth = OAuth2Session(client_id, redirect_uri=redirect_uri, scope=[self.scope])
+        authorization_url, state = oauth.authorization_url(self.auth_url)
+        self.flask.session['state'] = state  # store for checking by the request_uri when redirected back there
+        return authorization_url
+
+    def authorize_app_stage2(self, response_url, client_secret):
+        json = oauth.fetch_token(self.token_url, authorization_response=response_url, client_secret=client_secret)
+        return json.get('access_token')

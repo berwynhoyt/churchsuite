@@ -24,6 +24,9 @@ from docx.oxml.shared import qn
 
 __version__ = '1.0.0'
 
+class PlanException(Exception): pass
+class NoPlansException(PlanException): pass
+
 # Regex of pattern used to identify start of red-highlighted text in service plans
 everyone_pattern = re.compile(r'(.* |^)((all|everyone|together|^people):)(.*)', re.IGNORECASE + re.DOTALL)
 # Regex of pattern used to identify start on non-red text in service plans
@@ -123,9 +126,11 @@ def add_page_number(section):
     run._r.append(instrText)
     run._r.append(fldChar2)
 
-def plan2docx(plan, quiet=False):
-    """ Save service plan to MS Word .docx file for easier markup by the service leader.
+def plan2docx(plan, quiet=False, stream=None):
+    """ Save service plan to MS Word .docx for clearer presentation and markup by the service leader.
         The output is also less noisy than the pdf plan exported by ChurchSuite.
+        If stream of type io.BytesIO() is supplied, save to stream instead of to a filename matching the plan.
+        Return filename matching the name of the service plan.
     """
     green = RGBColor(0, 153, 0)
     black = RGBColor(0, 0, 0)
@@ -176,7 +181,11 @@ def plan2docx(plan, quiet=False):
             if words:
                 add_paragraph(doc, words)
 
-    doc.save(filename)
+    if stream:
+        doc.save(stream)
+        stream.seek(0)  # rewind so stream can be read back or sent out as a web response
+    else:
+        doc.save(filename)
     return filename
 
 def plan2txt(plan):
@@ -197,20 +206,24 @@ def upcoming_services(db):
     """ Get all published and draft plans for the next week and output them as Word .docx files for easier markup.
         These are less noisy than the default Churchsuite 
     """
-    today = date.today()
+    if args.date.lower() == 'today':
+        start_date = date.today()
+    else:
+        start_date = date.fromisoformat(args.date)
     plans = []
     for status in ('published', 'draft'):
-        plans += db.get(cs.URL.plans, status=status, starts_after=str(today - timedelta(days=1)), starts_before=str(today + timedelta(days=7)))
+        plans += db.get(cs.URL.plans, status=status, starts_after=str(start_date - timedelta(days=1)), starts_before=str(start_date + timedelta(days=7)))
     if not plans:
-        sys.exit("There is no plan in ChurchSuite for the coming week")
+        raise NoPlansException(f"There is no plan in ChurchSuite for the week starting on {start_date.strftime("%d %B")}")
     return plans
 
 # Set defaults that may be used instead of command-line parameters when this module is imported (e.g. by serviceplan_app.py)
-args = SimpleNamespace(language='en_AU', pagesize='A4', fontsize=14)
+args = SimpleNamespace(language='en_AU', pagesize='A4', fontsize=14, date='today')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--language', action='store', default=args.language, help='Set language for docx file.')
+    parser.add_argument('--date', action='store', default='today', help="Specify date (YYYY-MM-DD) from which to download the following week's service plans (default today).")
+    parser.add_argument('--language', action='store', default=args.language, help="Set language for docx file.")
     parser.add_argument('--pagesize', action='store', default=args.pagesize, help='Set page size to "width,height" in mm or "A4" or "letter".')
     parser.add_argument('--fontsize', action='store', type=int, default=args.fontsize, help='Set normal fontsize on Pt. Headings are enlargements of this.')
     parser.add_argument('-v', '--verbose', action='count', default=0, help="Increase verbosity level (e.g., -vv).")
@@ -230,9 +243,15 @@ if __name__ == "__main__":
         sys.exit()
 
     import secret
-    db = cs.Churchsuite(secret.CLIENT_ID, secret.CLIENT_SECRET, raw=args.raw)
-    for plan in upcoming_services(db):
-        if args.txt:
-            plan2txt(plan)
-        else:
-            plan2docx(plan)
+    db = cs.Churchsuite(auth=(secret.CLIENT_ID, secret.CLIENT_SECRET), raw=args.raw)
+    # or test oauth_app authorization with the following.
+    #db = cs.ChurchsuiteApp()
+    #db.authorize_app_manual(auth=(secret.CLIENT_ID_app, secret.CLIENT_SECRET_app), redirect_uri="https://serviceplans.ts.r.appspot.com/authorized")
+    try:
+        for plan in upcoming_services(db):
+            if args.txt:
+                plan2txt(plan)
+            else:
+                plan2docx(plan)
+    except PlanException as e:
+        sys.exit(str(e))
