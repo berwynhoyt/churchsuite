@@ -3,12 +3,14 @@
 
 import os
 import sys
+import io
 import logging
 import secrets
-from datetime import date
+from datetime import date, timedelta
+from zipfile import ZipFile
 
 from requests_oauthlib import OAuth2Session
-from flask import Flask, session, request, redirect, url_for
+from flask import Flask, session, request, redirect, url_for, send_file
 from google.cloud import secretmanager
 import churchsuite as cs
 import serviceplan
@@ -19,8 +21,11 @@ def get_secret(secret_id, version_id="latest"):
     """ Access Google Secret Manager for the given secret_id; version_id can be "latest" or a specific number.
         If environment variable GOOGLE_CLOUD_PROJECT is not defined, instead look up the secret_id in secret_app.py (for local testing).
     """
+    if not os.getenv('GAE_ENV') and request.host.startswith('localhost'):
+        os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1' # allow debug using insecure http://localhost
     project_id = os.getenv('GOOGLE_CLOUD_PROJECT')
     if not project_id:
+        print(f"Importing secret {secret_id} from secret_app.py")
         import secret_app
         return getattr(secret_app, secret_id)
     client = secretmanager.SecretManagerServiceClient()
@@ -38,34 +43,48 @@ def version():
 @app.route("/")
 def home():
     """ Display home page """
-    start_date = date.today()
-    url = f"{request.url_root}docxplan?fontsize={serviceplan.args.fontsize}&date={start_date.isoformat()}"
-    output = [f"<h1>Docx Service Plan Export Tool v{__version__}</h1>"]
-    output += [f"""<p>Click <a href="{url}">{url}</a> to fetch the coming week's service plans.</p>"""]
+    today = date.today()
+    future = f"{request.url_root}docxplans?fontsize={serviceplan.args.fontsize}&starts_after={today}"
+    past = f"{request.url_root}docxplans?fontsize={serviceplan.args.fontsize}&starts_after={today-timedelta(days=31)}&starts_before={today}"
+    output = f"""
+        <h1>Docx Service Plan Export Tool v{__version__}</h1>
+        <p>Download service plans for <a href="{future}">the future</a> or <a href="{past}">the past month</a> plans.
+    """
     project = os.environ.get('GOOGLE_CLOUD_PROJECT')
     if project:
-        output += [f"<p>Running on Google App Engine with PROJECT_ID={os.environ.get('GOOGLE_CLOUD_PROJECT')}</p>"]
-    return '\n'.join(output)
+        output += f"<p>Running on Google App Engine with PROJECT_ID={os.environ.get('GOOGLE_CLOUD_PROJECT')}</p>"
+    return output
 
-@app.route("/docxplan")
-def docxplan():
+@app.route("/docxplans")
+def docxplans():
     if 'token' not in session:
         # Store any query parameters into session, and remember query path
         session['query_params'] = dict(request.args)
         session['query_endpoint'] = request.path
         return redirect(url_for('login'))
+    args = serviceplan.args
     for k, v in serviceplan.args.__dict__.items():
-        serviceplan.args[k] = request.args.get(k, default=v, type=type(v))
-    cs = serviceplan.Churchsuite(token=session.get('token'))
-    plans = cs.upcoming_services(db)
-    stream = io.BytesIO()
-    filename = cs.plan2docx(plan[0], stream=stream)
-    return send_file(stream, as_attachment=True, download_name=filename)
+        setattr(args, k, request.args.get(k, default=v, type=type(v)))
+    db = cs.Churchsuite(token=session.get('token'))
+    plans = serviceplan.get_serviceplans(db)
+    if not plans:
+        return f"There are no plans in ChurchSuite starting after ({args.starts_after if args.starts_after or args.starts_before else 'today'}) and before ({args.starts_before})"
+
+    # Zip up the plans and send them to the user
+    zipstream = io.BytesIO()
+    with ZipFile(zipstream, 'w') as zf:
+        for plan in plans:
+            stream = io.BytesIO()
+            filename = serviceplan.plan2docx(db, plan, stream=stream)
+            zf.writestr(filename, stream.getvalue())
+    zipstream.seek(0)
+    return send_file(zipstream, as_attachment=True, download_name='serviceplans.zip')
 
 @app.route("/login")
 def login():
     """ Get ChurchSuite authorization token and store it in the session """
-    oauth = OAuth2Session(get_secret('client_id'), redirect_uri=url_for('callback'), scope=[cs.Churchsuite.scope])
+    callback_url = request.url_root + 'callback'
+    oauth = OAuth2Session(get_secret('client_id'), redirect_uri=callback_url, scope=[cs.Churchsuite.scope])
     authorization_url, state = oauth.authorization_url(cs.Churchsuite.auth_url)
     session['oauth_state'] = state  # store for checking by the request_uri when redirected back there
     return redirect(authorization_url)
@@ -77,13 +96,14 @@ def callback():
     if request.args.get('state') != session.pop('oauth_state'):
         return "Invalid state parameter", 400
 
-    oauth = OAuth2Session(get_secret('client_id'), redirect_uri=url_for('callback'), scope=[cs.Churchsuite.scope])
+    callback_url = request.url_root + 'callback'
+    oauth = OAuth2Session(get_secret('client_id'), redirect_uri=callback_url, scope=[cs.Churchsuite.scope])
     json = oauth.fetch_token(cs.Churchsuite.token_url, authorization_response=request.url, client_secret=get_secret('client_secret'))
     session['token'] = json.get('access_token')
 
     endpoint = session.get('query_endpoint', '/')
     query_params = session.get('query_params', {})
-    return redirect(url_for(endpoint, **query_params))
+    return redirect(url_for(endpoint.lstrip('/'), **query_params))
 
 if __name__ == "__main__":
     import argparse
@@ -93,6 +113,4 @@ if __name__ == "__main__":
 
     logging.basicConfig(level=logging.INFO, format=f'%(levelname)s: %(message)s')
     port = int(os.environ.get("PORT", 8080))
-    if not os.getenv('GAE_ENV'):
-        print(f"Running as local server on localhost:{port}")
     app.run(debug=True, host="0.0.0.0", port=port)
