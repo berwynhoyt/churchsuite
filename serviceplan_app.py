@@ -50,9 +50,6 @@ def home():
         <h1>Docx Service Plan Export Tool v{__version__} for ChurchSuite</h1>
         <p>Download service plans for <a href="{future}">the future</a> or <a href="{past}">the past month</a> plans.
     """
-    project = os.environ.get('GOOGLE_CLOUD_PROJECT')
-    if project:
-        output += f"<p>Running on Google App Engine with PROJECT_ID={os.environ.get('GOOGLE_CLOUD_PROJECT')}</p>"
     return output
 
 @app.route("/docxplans")
