@@ -211,8 +211,11 @@ def get_serviceplans(db):
     if starts_after == 'today': starts_after = today
     if starts_before == 'today': starts_before = today
     kwargs = {}
-    if starts_after: kwargs['starts_after'] = starts_after
-    if starts_before: kwargs['starts_before'] = starts_before
+    if starts_after:
+        # make start date inclusive of that date
+        kwargs['starts_after'] = (date.fromisoformat(starts_after) - timedelta(days=1)).isoformat()
+    if starts_before:
+        kwargs['starts_before'] = starts_before
     plans = []
     for status in ('published', 'draft'):
         plans += db.get(cs.URL.plans, status=status, **kwargs)
@@ -224,8 +227,8 @@ args = SimpleNamespace(language='en_AU', pagesize='A4', fontsize=14, starts_afte
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--starts-after', action='store', default='', help="Specify date (YYYY-MM-DD) from which to download upcoming service plans (default today).")
-    parser.add_argument('--starts-before', action='store', default='', help="Specify date (YYYY-MM-DD) from which to download upcoming service plans.")
+    parser.add_argument('--starts-after', action='store', default='', help="Specify start date (YYYY-MM-DD) from which to download upcoming service plans (default today).")
+    parser.add_argument('--starts-before', action='store', default='', help="Specify end date (YYYY-MM-DD) to download service plans up to.")
     parser.add_argument('--language', action='store', default=args.language, help="Set language for docx file.")
     parser.add_argument('--pagesize', action='store', default=args.pagesize, help='Set page size to "width,height" in mm or "A4" or "letter".')
     parser.add_argument('--fontsize', action='store', type=int, default=args.fontsize, help='Set normal fontsize on Pt. Headings are enlargements of this.')

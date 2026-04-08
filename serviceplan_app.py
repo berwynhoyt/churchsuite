@@ -47,7 +47,7 @@ def home():
     future = f"{request.url_root}docxplans?fontsize={serviceplan.args.fontsize}&starts_after={today}"
     past = f"{request.url_root}docxplans?fontsize={serviceplan.args.fontsize}&starts_after={today-timedelta(days=31)}&starts_before={today}"
     output = f"""
-        <h1>Docx Service Plan Export Tool v{__version__}</h1>
+        <h1>Docx Service Plan Export Tool v{__version__} for ChurchSuite</h1>
         <p>Download service plans for <a href="{future}">the future</a> or <a href="{past}">the past month</a> plans.
     """
     project = os.environ.get('GOOGLE_CLOUD_PROJECT')
