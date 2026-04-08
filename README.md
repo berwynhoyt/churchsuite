@@ -1,11 +1,20 @@
 # Docx Export for ChurchSuite and Python Scripting for API v2
 
-This repository contains two things:
+This repository contains three things:
 
-1. A Python library `churchsuite.py` to conveniently access to the ChurchSuite API v2.
-2. [Docx Export](#docx-export-of-service-plans), a Python script `serviceplan.py` that uses the library to export the coming week's service plans as MS Word `docx` files.
+1. [Docx Export Web App](https://serviceplans.ts.r.appspot.com/) that exports that exports the coming week's service plans as MS Word `docx` files.
+2. [Docx Export](#docx-export-of-service-plans), a command-line Python script `serviceplan.py` that exports the coming week's service plans as MS Word `docx` files.
+3. A Python library `churchsuite.py` to conveniently access to the ChurchSuite API v2. (This library is used by Docx Export.)
 
 ## Quickstart
+
+### Docx Export Web App
+
+To export your church service plans as Docx files, browse to this [live site](https://serviceplans.ts.r.appspot.com/). I'm afraid it won't work for you at this point because you don't have your client_id and client_secret in a Google Secrets database. I'm still working out the best way to do this for guest users without having to store all your ChurchSuite app secrets in my database, which seems dodgy.
+
+But if I can get around that, then all you have to do is setting up an app in ChurchSuite at `ProfileIcon -> Settings -> OAuth Apps`, and  set its "Redirect URI" to `https://serviceplans.ts.r.appspot.com/callback`.
+
+### Python library CLI script
 
 Install python >= 3.12 and set up a venv. Google for instructions.
 
@@ -66,11 +75,13 @@ It works as follows:
 - "Song", "Hymn" and "Psalm" headings are displayed in green along with the song title.
 - Level-2 section headings are omitted if they contain no text.
 
-To use it, do the setup as in the Quickstart above, then run `python serviceplan.py` and it will save one `docx` file for each service plan in the  coming week.
+To use it as a command-line interface, do the setup as in the Quickstart above, then run `python serviceplan.py` and it will save one `docx` file for each service plan in the coming week.
+
+If you don't like the command-line, to set up your own cloud app in Google App Engine as follows.
 
 ### Cloud app setup -- using Google App Engine (GAE)
 
-If you want your ChurchSuite users to download service plans simply by browsing to a bookmarked web page, this is for you. Instead of the command-line version above, you will need to run `serviceplan_app.py` as a web app on Google App Engine as follows:
+This section explains creating your own web app for your ChurchSuite users. It uses the example of the Docx Export app which lets users download service plans simply by browsing to a bookmarked web page. Instead of the command-line version above, you will need to run `serviceplan_app.py` as a web app on Google App Engine as follows:
 
 1. Follow instructions to [Create a Google Cloud project](https://docs.cloud.google.com/appengine/docs/standard/python3/building-app/creating-gcp-project). Call the project `<yourchurch>-serviceplans` (or something similar; called **[PROJECT_ID]** below). This is complicated, but hopefully you'll get there. I can't help you with it. It will make you create a Google billing account and will take your credit card but it won't actually bill you anything as typical usage of docx fits well within the free tier.
 3. Note: you can test the app on your localhost by running `python serviceplan_app.py` and then browsing to `localhost:8080`.
