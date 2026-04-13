@@ -17,6 +17,13 @@ import serviceplan
 
 __version__ = serviceplan.__version__
 
+# Pretty up the web page a bit
+Header = """<!DOCTYPE html><html><head><style>
+    html { font-family: "Trebuchet MS", sans-serif; }
+    h1, h2, h3, h4, h5, h6 { color: #3c4791; margin-bottom: -10px; }
+    a { color: #3c4791; }
+</style></head><body>"""
+
 def get_secret(secret_id, version_id="latest"):
     """ Access Google Secret Manager for the given secret_id; version_id can be "latest" or a specific number.
         If environment variable GOOGLE_CLOUD_PROJECT is not defined, instead look up the secret_id in secret_app.py (for local testing).
@@ -46,9 +53,11 @@ def home():
     today = date.today()
     future = f"{request.url_root}docxplans?fontsize={serviceplan.args.fontsize}&starts_after={today}"
     past = f"{request.url_root}docxplans?fontsize={serviceplan.args.fontsize}&starts_after={today-timedelta(days=31)}&starts_before={today}"
-    output = f"""
-        <h1>Docx Service Plan Export Tool v{__version__} for ChurchSuite</h1>
-        <p>Download service plans for <a href="{future}">the future</a> or <a href="{past}">the past month</a> plans.
+    output = f"""{Header}
+        <h1>DocExport</h1>
+        <p style="color: #3c4791;"><b>Church service plan beautifier for ChurchSuite that exports service plans as docx files.<br/>Version {__version__}.
+            Source code and documentation <a href="https://github.com/berwynhoyt/churchsuite">here</a>.</b></p>
+        <p>Download service plans for <a href="{future}">the future</a> or <a href="{past}">the past month</a>.
     """
     return output
 
