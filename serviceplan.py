@@ -147,7 +147,7 @@ def plan2docx(db, plan, stream=None, quiet=False):
     # Calculate the position of the right margin (page width - left margin - right margin) for right-margin tabstop below
     right_margin = section.page_width - section.left_margin - section.right_margin
 
-    doc.add_heading(title)
+    doc.add_heading(title, level=0)
     items = db.get(cs.URL.plan_items, params={'plan_ids[]':plan.id})
     for item in items:
         logging.info(pprint.pformat(item))
