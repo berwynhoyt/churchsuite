@@ -35,6 +35,10 @@ def joiner(*args):
     """ Join multiple args to the end of a url, separating them with '/' """
     return '/'.join(str(arg) for arg in args if arg is not None)
 
+def trace_logging():
+    """ Detect whether trace-level logging is enabled with a log_level even more verbose than DEBUG (-vvv) """
+    return logging.getLogger(__name__).getEffectiveLevel() < logging.DEBUG
+
 class Churchsuite:
     """ Class used to access ChurchSuite data """
 
@@ -77,13 +81,15 @@ class Churchsuite:
             params = {}
         params.update({k: str(v) for k, v in kwargs.items()})
         r = requests.get(url, headers={'Authorization': f'Bearer {self.token}'}, params=params)
-        logging.debug(f"request: {dump_request(r.request).replace('\n', '\n|  ')}")
+        if trace_logging():
+            logging.debug(f"request: {dump_request(r.request).replace('\n', '\n|  ')}")
         r.raise_for_status()
         self.append_raw(json.dumps(r.json(), indent=4) + '\n')
         # Convert json dict to SimpleNamespace (recursively for sub-objects)
         object = json.loads(r.text, object_hook=lambda d: SimpleNamespace(**d))
         formatted_response = f"GET {url} =>\n| {pprint.pformat(object).replace('\n', '\n| ')}"
-        logging.info(formatted_response)
+        if trace_logging():
+            logging.debug(formatted_response)
         if not hasattr(object, 'data'):
             raise Exception("No 'data' field found in response to {formatted_response}")
         return object.data
@@ -96,26 +102,27 @@ class ChurchsuiteApp(Churchsuite):
         import flask
         self.flask = flask
 
-    def authorize_app_manual(self, authclient_id, client_secret, redirect_uri=None, state=None):
+    def test_manual_authorization(self, client_id, client_secret=None, redirect_uri=None, state=None):
         """ Fetch access token using oauth_app authorization with the supplied authorization credentials.
             This is a test function to simulate what occurs with authorize_app_stage{1,2}()
         """
-        oauth = OAuth2Session(client_id, redirect_uri=redirect_uri, scope=[self.scope])
+        oauth = OAuth2Session(client_id, redirect_uri=redirect_uri, scope=[self.scope], pkce='S256')
         authorization_url, state = oauth.authorization_url(self.auth_url, state=state)
+        code_verifier = oauth._code_verifier  # fetch from private field as requests-oauthlib does not yet support a public access method
+        # In a web app, you would save state for later: session['oauth_state'] = state
+        # Simulate callback into Python here by making the user paste in the URL that came back to the browser from to the redirect_url
         print(f"Please go to {authorization_url} and authorize access.")
-        authorization_response = input('Enter the full callback URL: ')
-        json = oauth.fetch_token(self.token_url, authorization_response=authorization_response, client_secret=client_secret)
+        authorization_response_url = input('Enter the full callback URL: ')
+        # Check that request.args.get('state') != session.pop('oauth_state'); otherwise bomb out with error 400
+        # code_verifier = session.pop('code_verifier')
+        oauth = OAuth2Session(client_id, redirect_uri=redirect_uri)
+        oauth._code_verifier = code_verifier  # store into a private field as requests-oauthlib does not yet support a public access method
+        json = oauth.fetch_token(self.token_url, authorization_response=authorization_response_url, code_verifier=code_verifier)
         self.token = json.get('access_token')
 
-    def authorize_app_stage1(self, client_id, redirect_uri=None, state=None):
-        """ Returns an authorization url which app must redirect user to for ChurchSuite oauth_app authorization.
-            redirect_uri is this app's URL where ChurchSuite will send the user with an authorization token as json data.
-        """
-        oauth = OAuth2Session(client_id, redirect_uri=redirect_uri, scope=[self.scope])
-        authorization_url, state = oauth.authorization_url(self.auth_url)
-        self.flask.session['state'] = state  # store for checking by the request_uri when redirected back there
-        return authorization_url
-
-    def authorize_app_stage2(self, response_url, client_secret):
-        json = oauth.fetch_token(self.token_url, authorization_response=response_url, client_secret=client_secret)
-        return json.get('access_token')
+if __name__ == "__main__":
+    import secret_app
+    cs = ChurchsuiteApp()
+    os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1' # allow debug using insecure http://localhost
+    cs.test_manual_authorization(secret_app.client_id, secret_app.client_secret, redirect_uri='http://localhost:8080/callback')
+    print(f"\nSuccessful authorization! Token={cs.token}")
