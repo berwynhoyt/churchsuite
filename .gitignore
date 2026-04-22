@@ -1,6 +1,5 @@
 __pycache__
-secret.py
-secret_app.py
+config.py
 *.docx
 *.pdf
 json.txt

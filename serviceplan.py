@@ -12,7 +12,7 @@ import re
 from datetime import date, timedelta
 from types import SimpleNamespace
 
-import churchsuite as cs
+from churchsuite import Churchsuite, URL
 import pathvalidate
 
 # For docx export
@@ -148,7 +148,7 @@ def plan2docx(db, plan, stream=None, quiet=False):
     right_margin = section.page_width - section.left_margin - section.right_margin
 
     doc.add_heading(title, level=0)
-    items = db.get(cs.URL.plan_items, params={'plan_ids[]':plan.id})
+    items = db.get(URL.plan_items, params={'plan_ids[]':plan.id})
     for item in items:
         logging.info(pprint.pformat(item))
         names = [f"{person.first_name} {person.last_name}" for person in item.people or []]
@@ -188,7 +188,7 @@ def plan2docx(db, plan, stream=None, quiet=False):
 def plan2txt(db, plan):
     """ Print service plan as txt. This is mainly for developer tinkering. """
     print(f"{plan.date} {plan.name} {' (draft)' if plan.status=='draft' else ''}:")
-    items = db.get(cs.URL.plan_items, params={'plan_ids[]':plan.id})
+    items = db.get(URL.plan_items, params={'plan_ids[]':plan.id})
     for item in items:
         names = [f"{person.first_name} {person.last_name}" for person in item.people or []]
         if names:
@@ -218,7 +218,7 @@ def get_serviceplans(db):
         kwargs['starts_before'] = starts_before
     plans = []
     for status in ('published', 'draft'):
-        plans += db.get(cs.URL.plans, status=status, **kwargs)
+        plans += db.get(URL.plans, status=status, **kwargs)
     return plans
 
 # Set defaults that may be used instead of command-line parameters when this module is imported (e.g. by serviceplan_app.py)
@@ -248,11 +248,8 @@ if __name__ == "__main__":
         print(__version__)
         sys.exit()
 
-    import secret
-    db = cs.Churchsuite(auth=(secret.CLIENT_ID, secret.CLIENT_SECRET), raw=args.raw)
-    # or test oauth_app authorization with the following.
-    #db = cs.ChurchsuiteApp()
-    #db.authorize_app_manual(auth=(secret.CLIENT_ID_app, secret.CLIENT_SECRET_app), redirect_uri="https://serviceplans.ts.r.appspot.com/authorized")
+    import config
+    db = Churchsuite(auth=(config.UserAuth.CLIENT_ID, config.UserAuth.CLIENT_SECRET), raw=args.raw)
     plans = get_serviceplans(db)
     if not plans:
         sys.exit(f"There are no plans in ChurchSuite starting after ({args.starts_after if args.starts_after or args.starts_before else 'today'}) and before ({args.starts_before})")

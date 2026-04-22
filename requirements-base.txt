@@ -1,5 +1,0 @@
-# Requirements to run serviceplan.py locally
-requests >= 2.32.3
-requests-oauthlib >= 2.0.0
-python-docx >= 1.2.0
-pathvalidate >= 3.3.1
