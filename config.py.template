@@ -4,19 +4,17 @@
 # No need to supply a CLIENT_SECRET if you set the app as public in ChurchSuite (preferred)
 # (don't worry, this does not make your ChurchSuite login details 'public' -- all public apps are still protected by a user login)
 class OAuth:
-    CLIENT_ID = "00000000000000000000"
+    CLIENT_ID = ''
 
 # Client secrets for fast authentication as a particular API_enabled user
 class UserAuth:
-    CLIENT_ID = "00000000000000000000"
-    CLIENT_SECRET = "0000000000000000000000000000000000000000000000"
+    CLIENT_ID = ''
+    CLIENT_SECRET = ''
 
 # Make Flask sign cookies to ensure no middle-man hack has altered our cookies.
 # To regenerate this for deployment to your own server, run:
 #    python -c "import secrets; print(secrets.token_hex())"
-SECRET_KEY = '0000000000000000000000000000000000000000000000000000000000000000'
-# For testing auth
-import secrets; SECRET_KEY = secrets.token_hex()
+SECRET_KEY = ''
 
 # Whether to show debug traceback in the browser on errors. Set False for production servers.
 DEBUG=True
