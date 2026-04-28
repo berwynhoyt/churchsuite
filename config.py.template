@@ -4,9 +4,9 @@
 # No need to supply a CLIENT_SECRET if you set the app as public in ChurchSuite (preferred)
 # (don't worry, this does not make your ChurchSuite login details 'public' -- all public apps are still protected by a user login)
 class OAuth:
-    CLIENT_ID = ''
+    CLIENT_ID = '' field given in the URL parameters of the query that required login
 
-# Client secrets for fast authentication as a particular API_enabled user
+# Client secrets for fast user authentication as a particular API_enabled user (for Churchsuite class rather than ChurchsuiteApp)
 class UserAuth:
     CLIENT_ID = ''
     CLIENT_SECRET = ''

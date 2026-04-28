@@ -8,10 +8,10 @@ import pprint
 
 from types import SimpleNamespace
 from functools import wraps
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlencode
 
 import requests
-from flask import url_for, session, request, redirect
+from flask import Flask, url_for, session, request, redirect
 from requests_oauthlib import OAuth2Session
 
 import config
@@ -102,13 +102,14 @@ class Churchsuite:
         return object.data
 
 
-def test_manual_authorization(client_id, client_secret=None, redirect_url=None, state=None):
+# Test function to help a developer see the OAuth PKCE process flow in linear fashion
+def test_manual_oauth(client_id, redirect_url=None):
     """ Fetch access access_token using oauth_app authorization with the supplied authorization credentials.
         This is a test function to simulate what occurs with authorize_app_stage{1,2}()
     """
     from requests_oauthlib import OAuth2Session
     oauth = OAuth2Session(client_id, redirect_uri=redirect_url, scope=('full_access',), pkce='S256')
-    authorization_url, state = oauth.authorization_url(Churchsuite.auth_url, state=state)
+    authorization_url, state = oauth.authorization_url(Churchsuite.auth_url)
     code_verifier = oauth._code_verifier  # fetch from private field as requests-oauthlib does not yet support a public access method
     # In a web app, you would save state for later: session['oauth_state'] = state
     # Simulate callback into Python here by making the user paste in the URL that came back to the browser from to the redirect_url
@@ -127,15 +128,15 @@ def test_manual_authorization(client_id, client_secret=None, redirect_url=None, 
 
 
 class ChurchsuiteApp(Churchsuite):
-    def __init__(self, app, client_id=None, client_secret=None, use_pkce=True, login_url='/login', redirect_url='/login/callback', scope=('full_access',)):
+    def __init__(self, app, client_id=None, client_secret=None, *, use_pkce=True, login_url='/login', redirect_url='/login/callback', scope=('full_access',)):
         """ ChurchSuite subclass that sets up web server route functions to make the user log in.
             app: the flask app being authorized
-            client_id: defaults to flask config.py variable OAuth.CLIENT_ID
+            client_id: defaults to flask config.py variable OAuth.CLIENT_ID or failing that, to the query parameter 'client_id' sent to a url that triggers login
             client_secret: defaults to flask config.py variable OAuth.CLIENT_SECRET
-            use_pkce: if True, no client_secret is required (better): select 'public' app on ChurchSuite to use this.
+            use_pkce: if True, no client_secret is required (better): select 'public' app on ChurchSuite to use this
             login_url: path of url that any route will redirect to for login (any route decorated with @login_required)
             redirect_url: path of url that ChurchSuite will call back after login (must match the redirect_url set in ChurchSuite app config)
-            scope: is a sequence of scopes
+            scope: is a sequence of scopes; at the time of writing 'full_access' (default) is the only scope ChurchSuite supports
         """
         self.app = app
         self.raw = None  # it's unlikely the web server wants to retain all the json data
@@ -168,9 +169,12 @@ class ChurchsuiteApp(Churchsuite):
 
     def _login(self):
         """ Get ChurchSuite authorization access_token and store it in the flask session """
+        client_id = self.client_id or session.get('client_id')
+        if not client_id:
+            return {"error": "No client_id supplied. Obtain a Client Identifier from Churchsuite: User Menu -> Settings -> OAuth Apps -> Add OAuth App"}, 401
         callback_url = urljoin(request.url_root, self.redirect_url)
         pkce = 'S256' if self.use_pkce else None
-        oauth = OAuth2Session(self.client_id, redirect_uri=callback_url, scope=self.scope, pkce=pkce)
+        oauth = OAuth2Session(client_id, redirect_uri=callback_url, scope=self.scope, pkce=pkce)
         authorization_url, state = oauth.authorization_url(Churchsuite.auth_url)
         # Store items for the callback when redirected back there
         session['oauth_state'] = state
@@ -183,7 +187,8 @@ class ChurchsuiteApp(Churchsuite):
             return "Invalid state parameter", 400
 
         callback_url = urljoin(request.url_root, self.redirect_url)
-        oauth = OAuth2Session(self.client_id, redirect_uri=callback_url)
+        client_id = self.client_id or session.get('client_id')
+        oauth = OAuth2Session(client_id, redirect_uri=callback_url)
         json = oauth.fetch_token(Churchsuite.token_url, authorization_response=request.url, code_verifier=session.pop('code_verifier'))
         session['access_token'] = json.get('access_token')
 
@@ -199,8 +204,16 @@ class ChurchsuiteApp(Churchsuite):
         def wrapper(func):
             @wraps(func)
             def check_authorization(*args, **kwargs):
+                request_url = request.url
+                client_id = request.args.get('client_id')
+                if client_id is not None:
+                    session['client_id'] = client_id
+                    # Remove client_id from query parameters send to app's url so it doesn't confuse the app which doesn't need it. Move it to session instead.
+                    query_params = request.args.to_dict()
+                    query_params.pop('client_id')
+                    request_url = f"{request.base_url}?{urlencode(query_params)}" if query_params else request.base_url
                 if 'access_token' not in session:
-                    session['next_url'] = request.url
+                    session['next_url'] = request_url
                     return redirect(self.login_url)
                 return func(*args, **kwargs)
             return check_authorization
@@ -208,8 +221,17 @@ class ChurchsuiteApp(Churchsuite):
 
 
 if __name__ == "__main__":
-    client_id = client_id or config.OAuth.CLIENT_ID
-    client_secret = client_secret or config.OAuth.CLIENT_SECRET
+    import secrets
+
+    app = Flask(__name__)
+    app.secret_key = secrets.token_hex() # note: for a real app, don't pick a new secret every time because user will have to login every time server restarts
+    app.config['SESSION_COOKIE_SECURE'] = False # https not required for localhost debugging
     os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1' # allow debug using insecure http://localhost
-    access_token = test_manual_authorization(client_id, client_secret, redirect_uri='http://localhost:8080/login/callback')
-    print(f"\nSuccessful authorization! Token={access_token}")
+    @app.route('/')
+    def index():
+        return redirect('/login')
+
+    cs = ChurchsuiteApp(app)
+
+    port = int(os.environ.get("PORT", 8080))
+    app.run(debug=False, host="0.0.0.0", port=port)
