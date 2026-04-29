@@ -16,22 +16,15 @@ from requests_oauthlib import OAuth2Session
 
 from churchsuite import Churchsuite, ChurchsuiteApp
 import serviceplan
-import config
 
 __version__ = serviceplan.__version__
 
 app = Flask(__name__)
-app.secret_key = config.SECRET_KEY
-app.config['SESSION_COOKIE_SECURE'] = True  # send session data only over secure https (set to false below for localhost debugging)
+app.config['SESSION_COOKIE_SECURE'] = True  # send session data only over secure https (set to false below for localhost debugging only)
+app.config.from_pyfile('config_defaults.py', silent=True)  # update from version-tracked config defaults
+app.config.from_pyfile('config.py', silent=True)  # update from non-version-tracked config file
 
-cs = ChurchsuiteApp(app, config.OAuth.CLIENT_ID)
-
-# If there is more than one app run by this server, override this in the parent app that imports this module """
-@app.errorhandler(404)
-def notfound(e):
-    if request.path == '/':
-        return redirect('/docx')
-    return "<h1>Not found</h1>The requested URL was not found on this server.", 404
+cs = ChurchsuiteApp(app)
 
 @app.route('/docx')
 def home():
@@ -71,11 +64,35 @@ def download():
     zipstream.seek(0)
     return flask.send_file(zipstream, as_attachment=True, download_name='serviceplans.zip')
 
+# If there is more than one app run by this server, override this in the parent app that imports this module """
+@app.errorhandler(404)
+def notfound(e):
+    if request.path == '/':
+        return redirect('/docx')
+    return "<h1>Not found</h1>The requested URL was not found on this server.", 404
+
 
 # HTML pages
 
 templates = SimpleNamespace(
-    header = """<!DOCTYPE html><html> <head><style> {% include 'css' %} </style><link rel="icon" href="data:,"></head> <body>""",
+    header = """<!DOCTYPE html><html> <head><style> {% include 'css' %} </style><link rel="icon" href="data:,"></head><body>
+        <h1 style="margin: 30px 0px 10px;"><a href="/docx" style="text-decoration: none;">
+            <svg id="logo" fill="#3c4791" height="35" width="35" viewBox="0 0 493.525 493.525" style="margin: 0px 5px;" transform="translate(0,5) scale(1,-1)">
+                <path d="M430.557,79.556H218.44c21.622,12.688,40.255,29.729,54.859,49.906h157.258
+                    c7.196,0,13.063,5.863,13.063,13.06v238.662c0,7.199-5.866,13.064-13.063,13.064H191.894c-7.198,0-13.062-5.865-13.062-13.064
+                    V222.173c-6.027-3.1-12.33-5.715-18.845-7.732c-3.818,11.764-12.105,21.787-23.508,27.781c-2.39,1.252-4.987,2.014-7.554,2.844
+                    v136.119c0,34.717,28.25,62.971,62.968,62.971h238.663c34.718,0,62.969-28.254,62.969-62.971V142.522
+                    C493.525,107.806,465.275,79.556,430.557,79.556z"/>
+                <path d="M129.037,175.989c51.419,1.234,96.388,28.283,122.25,68.865c2.371,3.705,6.434,5.848,10.657,5.848
+                    c1.152,0,2.322-0.162,3.46-0.486c5.377-1.545,9.114-6.418,9.179-12.006c0-0.504,0-1.01,0-1.51
+                    c0-81.148-64.853-147.023-145.527-148.957V64.155c0-5.492-3.038-10.512-7.879-13.078c-2.16-1.139-4.533-1.707-6.889-1.707
+                    c-2.94,0-5.848,0.88-8.35,2.584L5.751,120.526C2.162,122.98,0.018,127.041,0,131.394c-0.017,4.338,2.113,8.418,5.687,10.902
+                    l100.17,69.451c2.518,1.753,5.459,2.631,8.414,2.631c2.355,0,4.696-0.553,6.857-1.676c4.855-2.549,7.909-7.6,7.909-13.092V175.989z
+                    "/>
+            </svg>
+        DocExport</h1></a>
+    """,
+
     footer = """</body></html>""",
 
     css = """
@@ -95,67 +112,12 @@ templates = SimpleNamespace(
 
     home = """
         {% include 'header' %}
-        <h1>DocExport</h1>
         <p style="color: #3c4791;"><b>Church service plan beautifier for ChurchSuite that exports service plans as docx files.<br/>Version {{ __version__ }}.
             Source code and documentation <a href="https://github.com/berwynhoyt/churchsuite">here</a>.</b></p>
 
         <form action="/docx/plans" >
-            <label for="future">Select service plans:</label><br>
-                <input type="radio" id="future" name="timeperiod" value="future" checked>
-                    <label for="future">Future</label><br>
-                <input type="radio" id="past" name="timeperiod" value="past">
-                    <label for="past">Past</label><br><br>
-            <div id="id_section" hidden>
-                <label for="client_id">Client Identifier<sup>(<b>Note 1</b>)</sup>:</label>
-                    <input type="text" id="client_id" name="client_id" value="">
-                    <div id="linksection" style="visibility:hidden; margin-left: 20px;">(direct link: <a id="autolink" href="{{ request.base_url }}?client_id=">link</a>)</div><br><br>
-            </div>
-          <input type="submit" value="Get service plans">
+          <input type="submit" value="Select exports">
         </form>
-
-        <div id="note1" hidden>
-            <br><br>
-            <p><b>Note 1</b>: To use this app you need a Client Identifier from ChurchSuite. Your browser will remember the number you enter here. Obtain this by setting up this app in ChurchSuite at:
-              <pre>    User Menu -> Settings -> OAuth Apps -> Add OAuth App</pre>
-            When adding an app, select "Public" for Application Type, and enter the following into the "Redirect URI" field:
-              <pre>    {{ request.url_root }}login/callback</pre>
-            ChurchSuite will then display your "Client Identifier" in your newly created app.</p>
-        </div>
-
-        <script>
-            const params = new URLSearchParams(window.location.search)
-            const form = document.querySelector('form');
-            const autolink = document.querySelector('#autolink')
-            function getCookie(name) {
-                let value = `; ${document.cookie}`;
-                let parts = value.split(`; ${name}=`);
-                if (parts.length === 2) return parts.pop().split(';').shift();
-            }
-
-            // Store client_id back into cookie on submit
-            form.onsubmit = function(form) {
-                const date = new Date();
-                date.setTime(date.getTime() + ( 400 * 24 * 60 * 60 * 1000)); // 400 days is max that browsers allow
-                document.cookie = "churchsuite_client_id=" + encodeURIComponent(form.client_id.value) + ";expires=" + date.toUTCString() + ";path=/";
-                return true; // true allows form submission
-            }
-
-            // Ask for client_id only if it wasn't supplied in the url
-            document.querySelector('#id_section').hidden = params.get('client_id')? true: false;
-            document.querySelector('#note1').hidden = params.get('client_id')? true: false;
-
-            // Auto-fill client_id from query parameter or cookie on load
-            form.client_id.value = params.get('client_id') ?? getCookie('churchsuite_client_id') ?? '';
-
-            // Update automatic client_id link as user types
-            const input = document.querySelector('#client_id')
-            input.onchange = input.onkeyup = function(input) {
-                autolink.search = '?client_id=' + encodeURIComponent(form.client_id.value);
-                autolink.textContent = autolink.href
-                document.querySelector('#linksection').style.visibility = form.client_id.value? 'visible': 'hidden';
-            };
-            input.onchange()
-        </script>
         {% include 'footer' %}
     """,
 
@@ -172,6 +134,9 @@ app.jinja_env.loader = jinja2.ChoiceLoader([string_loader, app.jinja_env.loader]
 
 
 if __name__ == "__main__":
+    import logging
+    logging.basicConfig(level=logging.DEBUG, format=f'%(levelname)s: %(message)s')
+
     app.config['SESSION_COOKIE_SECURE'] = False # https not required for localhost debugging
     os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1' # allow debug using insecure http://localhost
     port = int(os.environ.get("PORT", 8080))

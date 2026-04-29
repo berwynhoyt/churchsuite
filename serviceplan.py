@@ -249,7 +249,7 @@ if __name__ == "__main__":
         sys.exit()
 
     import config
-    db = Churchsuite(auth=(config.UserAuth.CLIENT_ID, config.UserAuth.CLIENT_SECRET), raw=args.raw)
+    db = Churchsuite(auth=(config.USER_CLIENT_ID, config.USER_CLIENT_SECRET), raw=args.raw)
     plans = get_serviceplans(db)
     if not plans:
         sys.exit(f"There are no plans in ChurchSuite starting after ({args.starts_after if args.starts_after or args.starts_before else 'today'}) and before ({args.starts_before})")
