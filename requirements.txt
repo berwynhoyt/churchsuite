@@ -8,3 +8,6 @@ pathvalidate >= 3.3.1
 
 # Required only when deployed on Google App Engine
 gunicorn >= 25.3.0
+
+# Only required if get_google_secret() is used to fetch a value from Google Secret Manager
+# google-cloud-secret-manager >= 2.27.0

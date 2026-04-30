@@ -11,16 +11,16 @@ from types import SimpleNamespace
 
 import jinja2
 import flask
-from flask import Flask, session, request, redirect, render_template_string
+from flask import Flask, session, request, url_for, redirect, render_template_string
 from requests_oauthlib import OAuth2Session
 
-from churchsuite import Churchsuite, ChurchsuiteApp
-import serviceplan
+from churchsuite import ChurchsuiteApp
+import docexport
 
-__version__ = serviceplan.__version__
+__version__ = docexport.__version__
 
 app = Flask(__name__)
-app.config['SESSION_COOKIE_SECURE'] = True  # send session data only over secure https (set to false below for localhost debugging only)
+app.config['SESSION_COOKIE_SECURE'] = True  # require secure https (set to False only for localhost debugging below)
 app.config.from_pyfile('config_defaults.py', silent=True)  # update from version-tracked config defaults
 app.config.from_pyfile('config.py', silent=True)  # update from non-version-tracked config file
 
@@ -39,18 +39,18 @@ def version():
 @cs.login_required
 def plans():
     today = date.today()
-    future = f"{request.url_root}docx/download?fontsize={serviceplan.args.fontsize}&starts_after={today}"
-    past = f"{request.url_root}docx/download?fontsize={serviceplan.args.fontsize}&starts_after={today-timedelta(days=31)}&starts_before={today}"
+    future = f"{request.url_root}docx/download?fontsize={docexport.args.fontsize}&starts_after={today}"
+    past = f"{request.url_root}docx/download?fontsize={docexport.args.fontsize}&starts_after={today-timedelta(days=31)}&starts_before={today}"
     return render_template_string(templates.plans, future=future, past=past)
 
 @app.route('/docx/download')
 @cs.login_required
 def download():
-    # Fetch original query parameters into serviceplan.args
-    args = serviceplan.args
+    # Fetch original query parameters into docexport.args
+    args = docexport.args
     for k, v in args.__dict__.items():
         setattr(args, k, request.args.get(k, default=v, type=type(v)))
-    plans = serviceplan.get_serviceplans(cs)
+    plans = docexport.get_serviceplans(cs)
     if not plans:
         return f"There are no plans in ChurchSuite starting after ({args.starts_after if args.starts_after or args.starts_before else 'today'}) and before ({args.starts_before})"
 
@@ -59,7 +59,7 @@ def download():
     with ZipFile(zipstream, 'w') as zf:
         for plan in plans:
             stream = io.BytesIO()
-            filename = serviceplan.plan2docx(cs, plan, stream=stream)
+            filename = docexport.plan2docx(cs, plan, stream=stream)
             zf.writestr(filename, stream.getvalue())
     zipstream.seek(0)
     return flask.send_file(zipstream, as_attachment=True, download_name='serviceplans.zip')
@@ -68,7 +68,7 @@ def download():
 @app.errorhandler(404)
 def notfound(e):
     if request.path == '/':
-        return redirect('/docx')
+        return redirect(url_for('home', **request.args))
     return "<h1>Not found</h1>The requested URL was not found on this server.", 404
 
 
@@ -113,11 +113,20 @@ templates = SimpleNamespace(
     home = """
         {% include 'header' %}
         <p style="color: #3c4791;"><b>Church service plan beautifier for ChurchSuite that exports service plans as docx files.<br/>Version {{ __version__ }}.
-            Source code and documentation <a href="https://github.com/berwynhoyt/churchsuite">here</a>.</b></p>
+            Examples, documentation, and source code <a href="https://github.com/berwynhoyt/churchsuite">here</a>.</b></p>
 
         <form action="/docx/plans" >
-          <input type="submit" value="Select exports">
+            <input type="hidden" name="client_id" value="">
+            <input type="submit" value="Select exports">
         </form>
+
+        <script>
+            const params = new URLSearchParams(window.location.search)
+            const form = document.querySelector('form')
+            form.client_id.value = params.get('client_id')
+            form.client_id.disabled = !form.client_id.value  // disable if no client_id specified
+        </script>
+
         {% include 'footer' %}
     """,
 

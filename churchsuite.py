@@ -18,13 +18,9 @@ from requests_oauthlib import OAuth2Session
 
 __version__ = '1.0.0'
 
-# List of URLs for ChurchSuite access
-class URL:
-    api = 'https://api.churchsuite.com/v2/'
+class ChurchError(Exception): pass
 
-    plans = api + 'planning/plans'
-    plan_items = api + 'planning/plan_items'
-    contacts = api + 'addressbook/contacts'
+api = 'https://api.churchsuite.com/v2'
 
 def dump_request(req):
     """ Debugging function to dump a PreparedRequest from request.Request().prepare() or response.request """
@@ -44,6 +40,20 @@ def trace_logging():
     """ Detect whether trace-level logging is enabled with a log_level even more verbose than DEBUG (-vvv) """
     return logging.getLogger(__name__).getEffectiveLevel() < logging.DEBUG
 
+class GoogleSecretManager:
+    def __init__(self, project_id):
+        self.project_id = project_id
+
+    def get(self, secret_id, version_id="latest"):
+        """ Access the value of given secret_id from Google Secret Manager; version_id can be "latest" or a specific number """
+        # Additional requirement if this function is used: pip install google-cloud-secret-manager
+        from google.cloud import secretmanager
+        client = secretmanager.SecretManagerServiceClient()
+        name = f"projects/{self.project_id}/secrets/{secret_id}/versions/{version_id}"
+        response = client.access_secret_version(request={"name": name})
+        return response.payload.data.decode("UTF-8")
+
+
 class Churchsuite:
     """ Class used to access ChurchSuite data """
 
@@ -51,11 +61,13 @@ class Churchsuite:
     auth_url = "https://login.churchsuite.com/oauth2/authorize"
     scope = 'full_access'
 
-    def __init__(self, access_token=None, auth=None, raw=None):
+    def __init__(self, auth=None, *, access_token=None, raw=None):
         """ Create ChurchSuite instance for access to ChurchSuite data.
             If access_token is not supplied, attempt to get one using user auth (client_id, client_secret).
             If filename raw is supplied, store all json text received from the server into that file.
         """
+        if not access_token and not auth:
+            raise ChurchError("You need to supply (client_id, client_secret) to Churchsuite class")
         self.access_token = access_token or self.authorize(*auth)
         self.raw = raw
         if raw is not None:
@@ -300,39 +312,38 @@ templates = SimpleNamespace(
         <p>ChurchSuite will then display your "Client Identifier" in your newly created app. Enter that number here.</p>
 
         <script>
-            const params = new URLSearchParams(window.location.search)
-            const form = document.querySelector('form');
+            const form = document.querySelector('form')
             const autolink = document.querySelector('#autolink')
             function getCookie(name) {
-                let value = `; ${document.cookie}`;
-                let parts = value.split(`; ${name}=`);
-                if (parts.length === 2) return parts.pop().split(';').shift();
+                let value = `; ${document.cookie}`
+                let parts = value.split(`; ${name}=`)
+                if (parts.length === 2) return parts.pop().split(';').shift()
             }
 
             // Store client_id back into cookie on submit
             form.onsubmit = function(f) {
                 if (!form.client_id.value) {
-                    document.querySelector('#error').hidden = false;
-                    return false;
+                    document.querySelector('#error').hidden = false
+                    return false
                 }
                 const date = new Date();
                 date.setTime(date.getTime() + ( 400 * 24 * 60 * 60 * 1000)); // 400 days is max that browsers allow
-                document.cookie = "churchsuite_client_id=" + encodeURIComponent(form.client_id.value) + ";expires=" + date.toUTCString() + ";path=/";
-                return true; // true allows form submission
+                document.cookie = "churchsuite_client_id=" + encodeURIComponent(form.client_id.value) + ";expires=" + date.toUTCString() + ";path=/"
+                return true  // true allows form submission
             }
 
             // Auto-fill from cookie on load
-            form.client_id.value = getCookie('churchsuite_client_id') ?? '';
+            form.client_id.value = getCookie('churchsuite_client_id') ?? ''
 
             // Update automatic client_id link as user types
             const input = document.querySelector('#client_id')
             input.onchange = input.onkeyup = function(input) {
                 if ('{{ next_url }}') {
                     const next_url = new URL('{{ next_url }}')
-                    next_url.searchParams.set('client_id', encodeURIComponent(form.client_id.value));
+                    next_url.searchParams.set('client_id', encodeURIComponent(form.client_id.value))
                     autolink.href = autolink.textContent = next_url
                 }
-                document.querySelector('#linksection').style.display = (form.client_id.value && '{{ next_url }}')? 'block': 'none';
+                document.querySelector('#linksection').style.display = (form.client_id.value && '{{ next_url }}')? 'block': 'none'
             };
             input.onchange()
         </script>

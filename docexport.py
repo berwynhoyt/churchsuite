@@ -12,7 +12,7 @@ import re
 from datetime import date, timedelta
 from types import SimpleNamespace
 
-from churchsuite import Churchsuite, URL
+import churchsuite
 import pathvalidate
 
 # For docx export
@@ -123,7 +123,7 @@ def add_page_number(section):
     run._r.append(instrText)
     run._r.append(fldChar2)
 
-def plan2docx(db, plan, stream=None, quiet=False):
+def plan2docx(cs, plan, stream=None, quiet=False):
     """ Save service plan to MS Word .docx for clearer presentation and markup by the service leader.
         The output is also less noisy than the pdf plan exported by ChurchSuite.
         If stream of type io.BytesIO() is supplied, save to stream instead of to a filename matching the plan.
@@ -148,7 +148,7 @@ def plan2docx(db, plan, stream=None, quiet=False):
     right_margin = section.page_width - section.left_margin - section.right_margin
 
     doc.add_heading(title, level=0)
-    items = db.get(URL.plan_items, params={'plan_ids[]':plan.id})
+    items = cs.get(f'{churchsuite.api}/planning/plan_items', params={'plan_ids[]':plan.id})
     for item in items:
         logging.info(pprint.pformat(item))
         names = [f"{person.first_name} {person.last_name}" for person in item.people or []]
@@ -185,10 +185,10 @@ def plan2docx(db, plan, stream=None, quiet=False):
         doc.save(filename)
     return filename
 
-def plan2txt(db, plan):
+def plan2txt(cs, plan):
     """ Print service plan as txt. This is mainly for developer tinkering. """
     print(f"{plan.date} {plan.name} {' (draft)' if plan.status=='draft' else ''}:")
-    items = db.get(URL.plan_items, params={'plan_ids[]':plan.id})
+    items = cs.get(f'{churchsuite.api}/planning/plan_items', params={'plan_ids[]':plan.id})
     for item in items:
         names = [f"{person.first_name} {person.last_name}" for person in item.people or []]
         if names:
@@ -199,7 +199,7 @@ def plan2txt(db, plan):
         for section, words in item_sections(item).items():
             print(textwrap.indent(f"*{section}*: {words}", '  '))
 
-def get_serviceplans(db):
+def get_serviceplans(cs):
     """ Get all published and draft plans for the next week and output them as Word .docx files for easier markup.
         These are less noisy than the default Churchsuite pdf plans.
         Use args.starts_after and args.starts_before to set dates of plans to get.
@@ -218,11 +218,11 @@ def get_serviceplans(db):
         kwargs['starts_before'] = starts_before
     plans = []
     for status in ('published', 'draft'):
-        plans += db.get(URL.plans, status=status, **kwargs)
+        plans += cs.get(f'{churchsuite.api}/planning/plans', status=status, **kwargs)
     return plans
 
-# Set defaults that may be used instead of command-line parameters when this module is imported (e.g. by serviceplan_app.py)
-# Note: type of default must match desired type as serviceplan_app.py uses that fact to cast incoming query parameters
+# Set defaults that may be used instead of command-line parameters when this module is imported (e.g. by docexport_app.py)
+# Note: type of default must match desired type as docexport_app.py uses that fact to cast incoming query parameters
 args = SimpleNamespace(language='en_AU', pagesize='A4', fontsize=14, starts_after='', starts_before='')
 
 if __name__ == "__main__":
@@ -249,12 +249,12 @@ if __name__ == "__main__":
         sys.exit()
 
     import config
-    db = Churchsuite(auth=(config.USER_CLIENT_ID, config.USER_CLIENT_SECRET), raw=args.raw)
-    plans = get_serviceplans(db)
+    cs = churchsuite.Churchsuite(auth=(config.USER_CLIENT_ID, config.USER_CLIENT_SECRET), raw=args.raw)
+    plans = get_serviceplans(cs)
     if not plans:
         sys.exit(f"There are no plans in ChurchSuite starting after ({args.starts_after if args.starts_after or args.starts_before else 'today'}) and before ({args.starts_before})")
     for plan in plans:
         if args.txt:
-            plan2txt(db, plan)
+            plan2txt(cs, plan)
         else:
-            plan2docx(db, plan)
+            plan2docx(cs, plan)
