@@ -95,10 +95,12 @@ The [DocExport app](README.md) is run on Google App Engine (GAE). You can run yo
 git clone https://github.com/berwynhoyt/churchsuite.git
 cd churchsuite
 gcloud config set project [PROJECT_ID]  # use the project name you selected in point 1 above
-gcloud app deploy
+gcloud app deploy --no-cache --promote
 ```
 
-Now the app will be running on the APP_URL that the command above supplies, typically: `https://[PROJECT_ID].ts.r.appspot.com/`
+Now the app will be running on the APP_URL that the command above supplies, typically: `https://[PROJECT_ID].ts.r.appspot.com/`.
+
+Note that the `--no-cache --promote` deployment options shown above are necessary to make sure your new deployment overwrites the old one; otherwise new deployment will add to the size of the docker image, which will start ***billing you*** for artifacts as soon as it is bigger than 500MB (the free tier limit). You can check the size of your deployment image in [Google Cloud Artifact Registry](https://console.cloud.google.com/artifacts). If it is too big, delete it and redeploy.
 
 ### Google Secret Manager
 
