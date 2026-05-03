@@ -1,12 +1,15 @@
 # ChurchSuite Tools
 
-See also: [advanced Churchsuite Python scripting](README-python.md) – my Python library for simple ChurchSuite scripting (used to create DocExport Tool).
+Tools include:
+
+1. [DocExport Tool (below)](#docexport-tool) – create beautiful church service plans as a Word document.
+2. [Churchsuite Python scripting](README-python.md) – my Python library for simple ChurchSuite scripting (used to create DocExport Tool).
 
 ## DocExport Tool
 
 This is a tool that exports church service plans as beautiful, clean, `docx` files. Compare this [docx sample](example/2026-04-05_9am_Morning_Service_(draft).docx) with ChurchSuite's [original pdf](2025-04-05_9am_Morning_Service.pdf) of the same service.
 
-[Try it yourself](https://serviceplans.ts.r.appspot.com/) in your browser using your own ChurchSuite account.
+You can [try it yourself here](https://serviceplans.ts.r.appspot.com/) if your church uses ChurchSuite.
 
 ### Features
 
