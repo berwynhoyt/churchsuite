@@ -301,7 +301,7 @@ templates = SimpleNamespace(
                 <div id="linksection" style="display:none; margin-left: 20px;">Direct link: <a id="autolink"></a><br>
                     (Bookmark this link to skip this page next time.
                     You can also send this link to your ChurchSuite users so they don't need to enter it.)</div><br>
-          <input type="submit" value="Submit identity">
+          <input type="submit" value="Login this ChurchSuite client">
         </form>
 
         <br><br>

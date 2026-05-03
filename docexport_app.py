@@ -6,7 +6,6 @@ import sys
 import io
 import secrets
 from datetime import date, timedelta
-from zipfile import ZipFile
 from types import SimpleNamespace
 
 import jinja2
@@ -38,31 +37,25 @@ def version():
 @app.route('/docx/plans')
 @cs.login_required
 def plans():
+    """ List download link for each service plan up to query parameter 'max_age_days' (default 400), sorted by date """
+    max_age_days = request.args.get('max_age_days', 400)
     today = date.today()
-    future = f"{request.url_root}docx/download?fontsize={docexport.args.fontsize}&starts_after={today}"
-    past = f"{request.url_root}docx/download?fontsize={docexport.args.fontsize}&starts_after={today-timedelta(days=31)}&starts_before={today}"
-    return render_template_string(templates.plans, future=future, past=past)
+    plans = docexport.get_serviceplans(cs, starts_from=date.today()-timedelta(days=max_age_days))
+    for plan in plans:
+        old = date.fromisoformat(plan.date) < today
+        plan.title = f"{plan.date} {plan.name}{' (draft)' if (plan.status=='draft' and not old) else ''}"
+    past = reversed([plan for plan in plans if date.fromisoformat(plan.date) < today])
+    upcoming = reversed([plan for plan in plans if date.fromisoformat(plan.date) >= today])
+    return render_template_string(templates.plans, past=list(past), upcoming=list(upcoming), today=today)
 
-@app.route('/docx/download')
+@app.route('/docx/plan/<int:plan_id>')
 @cs.login_required
-def download():
-    # Fetch original query parameters into docexport.args
-    args = docexport.args
-    for k, v in args.__dict__.items():
-        setattr(args, k, request.args.get(k, default=v, type=type(v)))
-    plans = docexport.get_serviceplans(cs)
-    if not plans:
-        return f"There are no plans in ChurchSuite starting after ({args.starts_after if args.starts_after or args.starts_before else 'today'}) and before ({args.starts_before})"
-
-    # Zip up the plans and send them to the user
-    zipstream = io.BytesIO()
-    with ZipFile(zipstream, 'w') as zf:
-        for plan in plans:
-            stream = io.BytesIO()
-            filename = docexport.plan2docx(cs, plan, stream=stream)
-            zf.writestr(filename, stream.getvalue())
-    zipstream.seek(0)
-    return flask.send_file(zipstream, as_attachment=True, download_name='serviceplans.zip')
+def plan(plan_id):
+    """ Download the specific plan by plan_id """
+    stream = io.BytesIO()
+    title = request.args.get('title', f'plan_{plan_id}')
+    filename = docexport.plan2docx(cs, plan_id, title, stream=stream)
+    return flask.send_file(stream, as_attachment=True, download_name=filename)
 
 # If there is more than one app run by this server, override this in the parent app that imports this module """
 @app.errorhandler(404)
@@ -100,6 +93,7 @@ templates = SimpleNamespace(
         html { font-family: "Trebuchet MS", sans-serif; }
         h1, h2, h3, h4, h5, h6 { color: #3c4791; margin-bottom: -10px; }
         a { color: #3c4791; }
+        a:active { cursor: progress; }
         input { color: #3c4791; accent-color: #3c4791; font-family: "Trebuchet MS", sans-serif; }
         input[type="submit"] { font-weight: bold; cursor: pointer; }
         .note-box {
@@ -117,7 +111,7 @@ templates = SimpleNamespace(
 
         <form action="/docx/plans" >
             <input type="hidden" name="client_id" value="">
-            <input type="submit" value="Select exports">
+            <input type="submit" value="Download service plans">
         </form>
 
         <script>
@@ -132,7 +126,34 @@ templates = SimpleNamespace(
 
     plans = """
         {% include 'header' %}
-        <p>Download service plans for <a href="{{ future }}">the future</a> or <a href="{{ past }}">the past month</a>.
+
+        <p><b>Upcoming service plans:</b></p>
+        <ul>{% for plan in upcoming %}
+            <li><a id="plan_{{ plan.id }}" href="plan/{{ plan.id }}?title={{ plan.title | urlencode }}" download="{{ plan.title }}.docx">{{ plan.title }}</a></li>
+        {% endfor %}</ul>
+        <span style="margin-left: 60px;">=> <a href="#DownloadUpcoming" onclick="downloadMultiple(upcomingPlans); return false;"><b>download all above</b></a></span>
+
+        <p><b>Past service plans:</b></p>
+        <ul>{% for plan in past %}
+            <li><a id="plan_{{ plan.id }}" href="plan/{{ plan.id }}?title={{ plan.title | urlencode }}" download="{{ plan.title }}.docx">{{ plan.title }}</a></li>
+        {% endfor %}</ul>
+
+        <script>
+            const upcomingPlans = [
+                {% for plan in upcoming %}
+                    {{ plan.id }},
+                {% endfor %}
+            ]
+            function downloadMultiple(plans) {
+                plans.forEach((plan_id, i) => {
+                    // timeout delay prevents the browser from blocking simultaneous requests
+                    setTimeout(() => {
+                        document.getElementById("plan_" + plan_id).click()
+                    }, i * 250)
+                })
+            }
+        </script>
+
         {% include 'footer' %}
     """,
 )

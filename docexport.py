@@ -123,16 +123,15 @@ def add_page_number(section):
     run._r.append(instrText)
     run._r.append(fldChar2)
 
-def plan2docx(cs, plan, stream=None, quiet=False):
+def plan2docx(cs, plan_id, title, stream=None, quiet=False):
     """ Save service plan to MS Word .docx for clearer presentation and markup by the service leader.
         The output is also less noisy than the pdf plan exported by ChurchSuite.
-        If stream of type io.BytesIO() is supplied, save to stream instead of to a filename matching the plan.
-        Return filename matching the name of the service plan.
+        If stream of type io.BytesIO() is supplied, save to stream instead of to a filename matching the title.
+        Return filename
     """
     green = RGBColor(0, 153, 0)
     black = RGBColor(0, 0, 0)
 
-    title = f"{plan.date} {plan.name}{' (draft)' if plan.status=='draft' else ''}"
     filename = pathvalidate.sanitize_filename(title) + '.docx'
     if not quiet:
         print(f"Creating {filename}")
@@ -148,7 +147,7 @@ def plan2docx(cs, plan, stream=None, quiet=False):
     right_margin = section.page_width - section.left_margin - section.right_margin
 
     doc.add_heading(title, level=0)
-    items = cs.get(f'{churchsuite.api}/planning/plan_items', params={'plan_ids[]':plan.id})
+    items = cs.get(f'{churchsuite.api}/planning/plan_items', params={'plan_ids[]':plan_id})
     for item in items:
         logging.info(pprint.pformat(item))
         names = [f"{person.first_name} {person.last_name}" for person in item.people or []]
@@ -185,10 +184,10 @@ def plan2docx(cs, plan, stream=None, quiet=False):
         doc.save(filename)
     return filename
 
-def plan2txt(cs, plan):
+def plan2txt(cs, plan_id, title):
     """ Print service plan as txt. This is mainly for developer tinkering. """
-    print(f"{plan.date} {plan.name} {' (draft)' if plan.status=='draft' else ''}:")
-    items = cs.get(f'{churchsuite.api}/planning/plan_items', params={'plan_ids[]':plan.id})
+    print(f"{title}:")
+    items = cs.get(f'{churchsuite.api}/planning/plan_items', params={'plan_ids[]':plan_id})
     for item in items:
         names = [f"{person.first_name} {person.last_name}" for person in item.people or []]
         if names:
@@ -199,35 +198,43 @@ def plan2txt(cs, plan):
         for section, words in item_sections(item).items():
             print(textwrap.indent(f"*{section}*: {words}", '  '))
 
-def get_serviceplans(cs):
+def get_serviceplans(cs, starts_from=None, starts_before=None):
     """ Get all published and draft plans for the next week and output them as Word .docx files for easier markup.
         These are less noisy than the default Churchsuite pdf plans.
-        Use args.starts_after and args.starts_before to set dates of plans to get.
+        Set starts_from and/or starts_before in format 'YYYY-MM-DD' specify which plans to get.
     """
-    today = date.today().isoformat()
-    starts_after, starts_before = args.starts_after, args.starts_before
-    if not starts_after and not starts_before:
-        starts_after = today
-    if starts_after == 'today': starts_after = today
+    today = date.today()
+    if not starts_from and not starts_before:
+        starts_from = today
+    if starts_from == 'today': starts_from = today
     if starts_before == 'today': starts_before = today
     kwargs = {}
-    if starts_after:
+    if starts_from:
         # make start date inclusive of that date
-        kwargs['starts_after'] = (date.fromisoformat(starts_after) - timedelta(days=1)).isoformat()
+        kwargs['starts_after'] = str(starts_from - timedelta(days=1))
     if starts_before:
-        kwargs['starts_before'] = starts_before
+        kwargs['starts_before'] = str(starts_before)
     plans = []
     for status in ('published', 'draft'):
         plans += cs.get(f'{churchsuite.api}/planning/plans', status=status, **kwargs)
     return plans
 
+def list_serviceplans(cs, max_age_days=400):
+    """ Return service plans younger than max_age_days sorted by date """
+    today = date.today()
+    plans = get_serviceplans(cs, starts_from=date.today()-timedelta(days=max_age_days))
+    for plan in plans:
+        title = f"{plan.date} {plan.name}{' (draft)' if plan.status=='draft' else ''}"
+        print(title)
+
+
 # Set defaults that may be used instead of command-line parameters when this module is imported (e.g. by docexport_app.py)
 # Note: type of default must match desired type as docexport_app.py uses that fact to cast incoming query parameters
-args = SimpleNamespace(language='en_AU', pagesize='A4', fontsize=14, starts_after='', starts_before='')
+args = SimpleNamespace(language='en_AU', pagesize='A4', fontsize=14, starts_from='', starts_before='')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--starts-after', action='store', default='', help="Specify start date (YYYY-MM-DD) from which to download upcoming service plans (default today).")
+    parser.add_argument('--starts-from', action='store', default='', help="Specify start date (YYYY-MM-DD) from which to download upcoming service plans (default today).")
     parser.add_argument('--starts-before', action='store', default='', help="Specify end date (YYYY-MM-DD) to download service plans up to.")
     parser.add_argument('--language', action='store', default=args.language, help="Set language for docx file.")
     parser.add_argument('--pagesize', action='store', default=args.pagesize, help='Set page size to "width,height" in mm or "A4" or "letter".')
@@ -236,6 +243,7 @@ if __name__ == "__main__":
     parser.add_argument('--txt', action='store_true', help="Output text to terminal rather than to a docx file.")
     parser.add_argument('--raw', action='store', default=None, help="Send all json received from the server into the specified raw json file.")
     parser.add_argument('--version', action='store_true', help="Print version number of this script and exit.")
+    parser.add_argument('-l', '--list', action='store', nargs='?', type=int, default=None, const=400, help="List service titles, sorted by date, up to specified days old (default 400)")
     args = parser.parse_args()
     if len(sys.argv) < 2:
         print(f"{sys.argv[0]} exports ChurchSuite service plans to a docx file. For help, run: {sys.argv[0]} -h")
@@ -250,11 +258,17 @@ if __name__ == "__main__":
 
     import config
     cs = churchsuite.Churchsuite(auth=(config.USER_CLIENT_ID, config.USER_CLIENT_SECRET), raw=args.raw)
-    plans = get_serviceplans(cs)
+
+    if args.list is not None:
+        list_serviceplans(cs, max_age_days=args.list)
+        sys.exit()
+
+    plans = get_serviceplans(cs, args.starts_from, args.starts_before)
     if not plans:
-        sys.exit(f"There are no plans in ChurchSuite starting after ({args.starts_after if args.starts_after or args.starts_before else 'today'}) and before ({args.starts_before})")
+        sys.exit(f"There are no plans in ChurchSuite starting from ({args.starts_from if args.starts_from or args.starts_before else 'today'}) and before ({args.starts_before})")
     for plan in plans:
+        title = f"{plan.date} {plan.name}{' (draft)' if plan.status=='draft' else ''}"
         if args.txt:
-            plan2txt(cs, plan)
+            plan2txt(cs, plan.id, title)
         else:
-            plan2docx(cs, plan)
+            plan2docx(cs, plan.id, title)
