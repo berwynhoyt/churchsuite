@@ -1,6 +1,6 @@
 ## ChurchSuite Python Module
 
-The `churchsuite.py` Python module makes it easy to create Python apps and scripts for the ChurchSuite API v2. Not only does it provide a class that supports queries to ChurchSuite, it also automates Churchsuite login, and capture of the user's `client_id`. This is the same module used for the [DocExport app](README.md).
+The `churchsuite.py` Python module makes it easy to create Python apps and scripts for the ChurchSuite API v2. Not only does it provide a class that supports queries to ChurchSuite, it also automates Churchsuite login, and capture of the user's `client_id`. This is the same module used for the [DocExport app](README.md). It requires Python >= 3.12 for backslashes in f-strings.
 
 ## Quick Examples
 
@@ -95,12 +95,16 @@ The [DocExport app](README.md) is run on Google App Engine (GAE). You can run yo
 git clone https://github.com/berwynhoyt/churchsuite.git
 cd churchsuite
 gcloud config set project [PROJECT_ID]  # use the project name you selected in point 1 above
-gcloud app deploy --no-cache --promote
+# delete artifacts from any previous builds (see below)
+gcloud app deploy
 ```
 
 Now the app will be running on the APP_URL that the command above supplies, typically: `https://[PROJECT_ID].ts.r.appspot.com/`.
 
-Note that the `--no-cache --promote` deployment options shown above are necessary to make sure your new deployment overwrites the old one; otherwise new deployment will add to the size of the docker image, which will start ***billing you*** for artifacts as soon as it is bigger than 500MB (the free tier limit). You can check the size of your deployment image in [Google Cloud Artifact Registry](https://console.cloud.google.com/artifacts). If it is too big, delete it and redeploy.
+**Note:** You are billed for any deployed image bigger than 500MB. Check its size in [Google Cloud Artifact Registry](https://console.cloud.google.com/artifacts). To images small:
+
+* Specify older Pythons in `app.yaml`. The `docexport` app is 461MB with Python 3.12 and 508MB with Python 3.14.
+* Before every deployment, delete the old image in [Google Cloud Artifact Registry](https://console.cloud.google.com/artifacts).
 
 ### Google Secret Manager
 

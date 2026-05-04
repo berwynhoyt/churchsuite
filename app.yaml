@@ -1,4 +1,4 @@
-runtime: python314
+runtime: python312
 entrypoint: gunicorn -b :$PORT docexport_app:app
 
 # Keep the app running in the free tier of Google App Engine
