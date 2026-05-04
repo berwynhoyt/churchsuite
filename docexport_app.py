@@ -78,7 +78,17 @@ def notfound(e):
 # HTML pages
 
 templates = SimpleNamespace(
-    header = """<!DOCTYPE html><html> <head><style> {% include 'css' %} </style><link rel="icon" href="data:,"></head><body>
+    header = """<!DOCTYPE html><html> <head><style> {% include 'css' %} </style><link rel="icon" href="data:,"></head>
+        <!-- Google tag (gtag.js) -->
+        <script async src="https://www.googletagmanager.com/gtag/js?id=G-MF5P9QH2LL"></script>
+        <script>
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          gtag('js', new Date());
+
+          gtag('config', 'G-MF5P9QH2LL');
+        </script>
+        <body>
         <h1 style="margin: 30px 0px 10px;"><a href="/docx" style="text-decoration: none;">
             <svg id="logo" fill="#3c4791" height="35" width="35" viewBox="0 0 493.525 493.525" style="margin: 0px 5px;" transform="translate(0,5) scale(1,-1)">
                 <path d="M430.557,79.556H218.44c21.622,12.688,40.255,29.729,54.859,49.906h157.258
