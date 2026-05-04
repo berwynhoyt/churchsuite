@@ -217,7 +217,40 @@ def get_serviceplans(cs, starts_from=None, starts_before=None):
     plans = []
     for status in ('published', 'draft'):
         plans += cs.get(f'{churchsuite.api}/planning/plans', status=status, **kwargs)
+
+    # Add an 'hour' attribute to each plan which may be used to sort plans that fall on the same day
+    for plan in plans:
+        plan.hour = plan_hour(plan.name)
     return plans
+
+def plan_hour(plan_name):
+    """ Return best guess of hour of day (0-23) of this plan based on clues like 10am in the plan name. Use for sorting.
+        If there is no specific time specified, look for clues: morning=8; afternoon=3; evening=6.
+        Otherwise return 12 (noon) if there is no indication.
+        Returns a floating point number so that, for example, '10:30' returns 10.5
+    """
+    # Match formats 10:01am, 10am, 9am, 9 am, or 9am[punctuation]: must be a word-boundary at end and space-boundary at the beginning
+    pattern = re.compile(r'(?:^|\s)(\d{1,2})(:\d{1,2})?\s?([ap]m\b)?', re.IGNORECASE)
+    match = pattern.search(plan_name)
+    if not match:
+        if 'morning' in plan_name.lower():
+            return 8.0
+        if 'afternoon' in plan_name.lower():
+            return 3.0
+        if 'evening' in plan_name.lower():
+            return 6.0
+        return 12
+    group = match.group
+    hour = float(group(1))
+    if group(2):
+        hour += float(group(2))/60
+    if group(3):
+        if group(3).lower().startswith('p'):
+            hour += 12
+    else:
+        if hour < 8: # don't hold services in the early hours, so assume small numbers are pm
+            hour += 12
+    return hour
 
 def list_serviceplans(cs, max_age_days=400):
     """ Return service plans younger than max_age_days sorted by date """

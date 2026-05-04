@@ -5,7 +5,9 @@ import json
 import os.path
 import logging
 import pprint
+import time
 
+from datetime import datetime
 from types import SimpleNamespace
 from functools import wraps
 from urllib.parse import urljoin, urlencode
@@ -61,33 +63,44 @@ class Churchsuite:
     auth_url = "https://login.churchsuite.com/oauth2/authorize"
     scope = 'full_access'
 
-    def __init__(self, auth=None, *, access_token=None, raw=None):
+    def __init__(self, auth=None, *, raw=None, scope=('full_access',), lazy_auth=False):
         """ Create ChurchSuite instance for access to ChurchSuite data.
-            If access_token is not supplied, attempt to get one using user auth (client_id, client_secret).
+            Attempt to authorize using user auth (client_id, client_secret).
+            If the authorization expires later, re-authorize using the same auth.
             If filename raw is supplied, store all json text received from the server into that file.
+            scope: is a sequence of scopes; at the time of writing ChurchSuite only supports 'full_access'
+            lazy_auth: if True, delays authorization until it is first required
         """
-        if not access_token and not auth:
+        if not auth:
             raise ChurchError("You need to supply (client_id, client_secret) to Churchsuite class")
-        self.access_token = access_token or self.authorize(*auth)
+        self.auth = auth
         self.raw = raw
         if raw is not None:
             # truncate file
             open(raw, 'w').close()
+        self.scope = scope
+        self._access_token = None
+        if not lazy_auth:
+            self.authorize()
+
+    @property
+    def access_token(self):
+        if not self._access_token or time.time() >= self._token_expiry:
+            self.authorize()
+        return self._access_token
 
     def append_raw(self, text):
         if self.raw is not None:
             with open(self.raw, 'a') as f:
                 f.write(text)
 
-    def authorize(self, client_id, client_secret, scope=('full_access',)):
-        """ Return access_token using api_enbaled_user authorization with the supplied authorization credentials.
-            scope: is a sequence of scopes
-        """
-        auth = (client_id, client_secret)
-        data = {'grant_type': 'client_credentials', 'scope': ','.join(scope)}
-        r = requests.post(self.token_url, auth=auth, json=data, headers={'Content-Type': 'application/json'})
+    def authorize(self):
+        """ Return access_token using api_enbaled_user authorization with the authorization credentials self.auth """
+        data = {'grant_type': 'client_credentials', 'scope': ','.join(self.scope)}
+        r = requests.post(self.token_url, auth=self.auth, json=data, headers={'Content-Type': 'application/json'})
         r.raise_for_status()
-        return r.json().get('access_token')
+        self._token_expiry = time.time() + float(r.json().get('expires_in')) - 60
+        self._access_token = r.json().get('access_token')
 
     def get(self, url, id=None, item=None, *, params=None, **kwargs):
         """ Return 'data' field from ChurchSuite GET response as a SimpleNamespace, or list of SimpleNamespaces if the request returns a list.
@@ -179,7 +192,10 @@ class ChurchsuiteApp(Churchsuite):
 
     @property
     def access_token(self):
-        return session['access_token']
+        token = session.get('access_token', None)
+        if not token or time.time() >= float(session.get('token_expiry', time.time()-60)):
+            return None
+        return token
 
     # Debugging logging of full incoming requests during login
     def _log_request(self):
@@ -219,7 +235,7 @@ class ChurchsuiteApp(Churchsuite):
         oauth = OAuth2Session(client_id, redirect_uri=callback_url)
         json = oauth.fetch_token(Churchsuite.token_url, authorization_response=request.url, code_verifier=session.pop('code_verifier'))
         session['access_token'] = json.get('access_token')
-
+        session['token_expiry'] = time.time() + float(json.get('expires_in')) - 60
         return redirect(session.pop('next_url', '/'))
 
     # Define a decorator that requires login for a route and brings them back to the same place.
@@ -233,7 +249,10 @@ class ChurchsuiteApp(Churchsuite):
             @wraps(func)
             def check_authorization(*args, **kwargs):
                 request_url = self.move_param_to_session('client_id')
-                if 'access_token' not in session:
+                token = session.get('access_token', None)
+                expiry = float(session.get('token_expiry', 0))
+                self.app.logger.debug(f"Session access_token ({f'length {len(token)}' if token else None}) expires at {datetime.fromtimestamp(expiry) if expiry else None}")
+                if not token or not expiry or expiry <= time.time():
                     session['next_url'] = request_url
                     # directly call _login rather than redirecting to it for the sake of speed
                     return self._login()
@@ -301,7 +320,7 @@ templates = SimpleNamespace(
                 <div id="linksection" style="display:none; margin-left: 20px;">Direct link: <a id="autolink"></a><br>
                     (Bookmark this link to skip this page next time.
                     You can also send this link to your ChurchSuite users so they don't need to enter it.)</div><br>
-          <input type="submit" value="Login this ChurchSuite client">
+          <input type="submit" value="Login this ChurchSuite client" autofocus>
         </form>
 
         <br><br>

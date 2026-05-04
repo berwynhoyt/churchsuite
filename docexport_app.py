@@ -4,9 +4,12 @@
 import os
 import sys
 import io
+import bisect
 import secrets
 from datetime import date, timedelta
 from types import SimpleNamespace
+from collections import defaultdict
+from operator import attrgetter
 
 import jinja2
 import flask
@@ -41,12 +44,19 @@ def plans():
     max_age_days = request.args.get('max_age_days', 400)
     today = date.today()
     plans = docexport.get_serviceplans(cs, starts_from=date.today()-timedelta(days=max_age_days))
-    for plan in plans:
+    # separate plans by date
+    past = defaultdict(list)
+    upcoming = defaultdict(list)
+    for plan in reversed(plans):
         old = date.fromisoformat(plan.date) < today
-        plan.title = f"{plan.date} {plan.name}{' (draft)' if (plan.status=='draft' and not old) else ''}"
-    past = reversed([plan for plan in plans if date.fromisoformat(plan.date) < today])
-    upcoming = reversed([plan for plan in plans if date.fromisoformat(plan.date) >= today])
-    return render_template_string(templates.plans, past=list(past), upcoming=list(upcoming), today=today)
+        plan.title = f"{plan.name}{' (draft)' if (plan.status=='draft' and not old) else ''}"
+        plan.filename = f"{plan.date} {plan.title}"
+        # add plans to each date and keep in sorted order using bisect and the plan.hour attribute
+        if date.fromisoformat(plan.date) >= today:
+            bisect.insort(upcoming[plan.date], plan, key=attrgetter('hour'))
+        else:
+            bisect.insort(past[plan.date], plan, key=attrgetter('hour'))
+    return render_template_string(templates.plans, past=past, upcoming=upcoming, today=today)
 
 @app.route('/docx/plan/<int:plan_id>')
 @cs.login_required
@@ -128,20 +138,28 @@ templates = SimpleNamespace(
         {% include 'header' %}
 
         <p><b>Upcoming service plans:</b></p>
-        <ul>{% for plan in upcoming %}
-            <li><a id="plan_{{ plan.id }}" href="plan/{{ plan.id }}?title={{ plan.title | urlencode }}" download="{{ plan.title }}.docx">{{ plan.title }}</a></li>
+        <ul>{% for day, plans in upcoming.items() %}
+            <li>{{ day }}: {% for plan in plans %}
+                <a id="plan_{{ plan.id }}" href="plan/{{ plan.id }}?title={{ plan.filename | urlencode }}" download="{{ plan.filename }}.docx">{{ plan.title }}</a>
+                {{ '' if loop.last else ' | ' }}
+            {% endfor %}</li>
         {% endfor %}</ul>
         <span style="margin-left: 60px;">=> <a href="#DownloadUpcoming" onclick="downloadMultiple(upcomingPlans); return false;"><b>download all above</b></a></span>
 
         <p><b>Past service plans:</b></p>
-        <ul>{% for plan in past %}
-            <li><a id="plan_{{ plan.id }}" href="plan/{{ plan.id }}?title={{ plan.title | urlencode }}" download="{{ plan.title }}.docx">{{ plan.title }}</a></li>
+        <ul>{% for day, plans in past.items() %}
+            <li>{{ day }}: {% for plan in plans %}
+                <a id="plan_{{ plan.id }}" href="plan/{{ plan.id }}?title={{ plan.filename | urlencode }}" download="{{ plan.filename }}.docx">{{ plan.title }}</a>
+                {{ '' if loop.last else ' | ' }}
+            {% endfor %}</li>
         {% endfor %}</ul>
 
         <script>
             const upcomingPlans = [
-                {% for plan in upcoming %}
-                    {{ plan.id }},
+                {% for plans in upcoming.values() %}
+                    {% for plan in plans %}
+                        {{ plan.id }},
+                    {% endfor %}
                 {% endfor %}
             ]
             function downloadMultiple(plans) {
