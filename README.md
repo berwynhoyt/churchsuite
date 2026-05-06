@@ -7,7 +7,7 @@ Tools include:
 
 ## DocExport Tool
 
-This is a tool that exports church service plans as beautiful, clean, `docx` files. Compare this [docx sample](example/2026-04-05_9am_Morning_Service_(draft).docx) with ChurchSuite's [original pdf](2025-04-05_9am_Morning_Service.pdf) of the same service.
+This is a tool that exports church service plans as beautiful, clean, `docx` files. Compare this [docx sample](https://github.com/berwynhoyt/churchsuite/raw/refs/heads/master/example/2026-04-05_9am_Morning_Service_(draft).docx) with ChurchSuite's [original pdf](https://github.com/berwynhoyt/churchsuite/raw/refs/heads/master/example/2026-04-05_9am_Morning_Service.pdf) of the same service.
 
 You can [try it yourself here](https://serviceplans.ts.r.appspot.com/) if your church uses ChurchSuite.
 
